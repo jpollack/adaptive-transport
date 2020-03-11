@@ -5,13 +5,13 @@
 #include <errno.h>
 #include <stdlib.h>
 
-std::pair<bool,size_t> full_read (int fd, void *buf, size_t size)
+std::pair<bool,uint32_t> full_read (int fd, void *buf, uint32_t size)
 {
     uint8_t *p = (uint8_t *)buf;
-    size_t total = 0;
+    uint32_t total = 0;
     while (size > 0)
     {
-	ssize_t bytes = 0;
+	suint32_t bytes = 0;
 	do
 	{
 	    bytes = read (fd, p, size);
@@ -34,13 +34,13 @@ std::pair<bool,size_t> full_read (int fd, void *buf, size_t size)
     return std::make_pair (false, total);
 }
 
-size_t full_write (int fd, const void *buf, size_t size)
+uint32_t full_write (int fd, const void *buf, uint32_t size)
 {
     const uint8_t *p = (const uint8_t *)buf;
-    size_t total = 0;
+    uint32_t total = 0;
     while (size > 0)
     {
-	ssize_t bytes = 0;
+	suint32_t bytes = 0;
 	do
 	{
 	    bytes = write (fd, p, size);
