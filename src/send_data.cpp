@@ -5,14 +5,15 @@
 #include <deque>
 #include "matplotlibcpp.h"
 #include "Plot.hpp"
+#include <cstdlib>
 
 namespace plt = matplotlibcpp;
 
 int main (int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc != 4)
     {
-	fprintf (stderr, "usage: %s host port\n", argv[0]);
+	fprintf (stderr, "usage: %s host port bandwidth\n", argv[0]);
 	return -1;
     }
 
@@ -31,7 +32,8 @@ int main (int argc, char **argv)
     UDPStream ustream;
     Address peer (argv[1], argv[2]);
     ustream.setRemote (peer);
-
+    ustream.bandwidth = std::atoi (argv[3]);
+    
     ustream.onDroppedFunc = [](uint32_t seq)
 				{
 				    fprintf (stderr, "Dropped %d\n", seq);

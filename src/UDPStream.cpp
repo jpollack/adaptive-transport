@@ -136,31 +136,31 @@ void UDPStream::onTSReturnPacket (const std::string& payload)
     
 }
 
-void UDPStream::onDataPacket (const std::string& payload)
-{
-    // just a normal data packet.
-    uint32_t dseq = ((uint32_t *)payload.c_str ())[0];
-    if (dseq == m_nextSeq)
-    {
-	// fast path
-	memcpy (m_recvBuff.wptr (), 4+payload.c_str (), payload.size ()-4);
-	m_recvBuff.wptrAdvance (payload.size () - 4);
-	m_nextSeq++;
-    }
-    else
-    {
-	// out of order path
-	m_recvMap[dseq] = payload.substr (4);
-    }
-    while (m_recvMap.find (m_nextSeq) != m_recvMap.end ())
-    {
-	const std::string& pl = m_recvMap[m_nextSeq];
-	memcpy (m_recvBuff.wptr (), pl.c_str () + 4, pl.size () - 4);
-	m_recvBuff.wptrAdvance (pl.size () - 4);
-	m_recvMap.erase (m_nextSeq);
-	m_nextSeq++;
-    }
-}
+// void UDPStream::onDataPacket (const std::string& payload)
+// {
+//     // just a normal data packet.
+//     uint32_t dseq = ((uint32_t *)payload.c_str ())[0];
+//     if (dseq == m_nextSeq)
+//     {
+// 	// fast path
+// 	memcpy (m_recvBuff.wptr (), 4+payload.c_str (), payload.size ()-4);
+// 	m_recvBuff.wptrAdvance (payload.size () - 4);
+// 	m_nextSeq++;
+//     }
+//     else
+//     {
+// 	// out of order path
+// 	m_recvMap[dseq] = payload.substr (4);
+//     }
+//     while (m_recvMap.find (m_nextSeq) != m_recvMap.end ())
+//     {
+// 	const std::string& pl = m_recvMap[m_nextSeq];
+// 	memcpy (m_recvBuff.wptr (), pl.c_str () + 4, pl.size () - 4);
+// 	m_recvBuff.wptrAdvance (pl.size () - 4);
+// 	m_recvMap.erase (m_nextSeq);
+// 	m_nextSeq++;
+//     }
+// }
 void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
 {
     // if the data's too old (or a dup) just drop it entirely.
@@ -190,27 +190,27 @@ void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
 
     
 }
-void UDPStream::onMetadataPacket (const std::string& payload)
-{
-    char type = payload.c_str ()[0];
-    switch(type)
-    {
-    case 'E':
-	// eof
-	reof = true;
-	break;
-    default:
-	fprintf (stderr, "unexpected metadata type '%c'(%d)\n", type, type);
-	abort ();
-    }
+// void UDPStream::onMetadataPacket (const std::string& payload)
+// {
+//     char type = payload.c_str ()[0];
+//     switch(type)
+//     {
+//     case 'E':
+// 	// eof
+// 	reof = true;
+// 	break;
+//     default:
+// 	fprintf (stderr, "unexpected metadata type '%c'(%d)\n", type, type);
+// 	abort ();
+//     }
     
-}
+// }
 void UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv)
 {
     if (!m_ptt.setRecv (seq, tsRecv))
     {
-	fprintf (stderr, "Couldn't find matching packet\n");
-	abort ();
+	fprintf (stderr, "Couldn't find matching packet.  got ack for %u, %lu\n", seq, tsRecv);
+	// abort ();
     }
 }
 void UDPStream::receiverEntry (void)

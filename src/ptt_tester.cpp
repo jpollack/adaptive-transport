@@ -12,11 +12,18 @@ int main (int argc, char **argv)
 	seq.emplace_back (buf.setSent ());
     }
 
-    for (int ii=0; ii < 100; ii += 3)
-    {
-	buf.setRecv (seq[ii]);
-    }
+    buf.setRecv (seq[0]);
+    buf.setRecv (seq[3]);
+    buf.setRecv (seq[6]);
+    buf.setRecv (seq[5]);
+    buf.setRecv (seq[7]);
 
+
+    buf.setRecv (seq[10]);
+    buf.setRecv (seq[11]);
+    buf.setRecv (seq[12]);
+    buf.setRecv (seq[13]);
+    // buf.setRecv (seq[14]);
     while (buf.readable ())
     {
 	const auto * el = buf.rptr ();

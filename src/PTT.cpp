@@ -119,22 +119,52 @@ bool PTT::setRecv (SeqNum seq, Timestamp tsRecv)
     }
     
     Metadata *mbase = (Metadata *)m_base;
-    while (m_head1 != m_head0)
+    size_t ii = m_head1;
+    // fastpath.  when the recv is in order
+    if (mbase[ii].seq == seq)
     {
-	size_t ii = this->advanceHead1 ();
-	
+	mbase[ii].tsRecv = tsRecv;
+
+	while ((m_head1 != m_head0) && (mbase[m_head1].tsRecv))
+	{
+	    if (++m_head1 == m_size)
+	    {
+		m_head1 = 0;
+	    }
+	}
+	return true;
+    }
+
+    ii++;
+    if (ii == m_size)
+    {
+	ii = 0;
+    }
+
+    while (ii != m_head0)
+    {
 	if (mbase[ii].seq == seq)
 	{
-	    if (mbase[ii].tsRecv)
-	    {
-		// duplicate
-		fprintf (stderr, "Error, ptt seq %lu dup tsRecv. [%lu -> %lu]\n", seq, mbase[ii].tsRecv, tsRecv);
-		abort ();
-	    }
 	    mbase[ii].tsRecv = tsRecv;
+	    if (indexDifference (ii, m_head1) > 5)
+	    {
+		m_head1 = ii;		
+		while ((m_head1 != m_head0) && (mbase[m_head1].tsRecv))
+		{
+		    if (++m_head1 == m_size)
+		    {
+			m_head1 = 0;
+		    }
+		}
+	    }
 	    return true;
 	}
-	
+
+	ii++;
+	if (ii == m_size)
+	{
+	    ii = 0;
+	}
     }
 
     return false;

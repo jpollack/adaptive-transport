@@ -4,6 +4,7 @@
 #include "Address.hpp"
 #include "PTT.hpp"
 #include "readerwriterqueue.h"
+#include "blockingconcurrentqueue.h"
 #include <unordered_map>
 #include "CircBuff.hpp"
 #include "Socket.hpp"
@@ -16,7 +17,7 @@
 class UDPStream
 {
 private:
-    using PayloadQueue = moodycamel::BlockingReaderWriterQueue<std::string>;
+    using PayloadQueue = moodycamel::BlockingConcurrentQueue<std::string>;
 public:
     UDPStream ();
     ~UDPStream ();
