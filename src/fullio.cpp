@@ -11,7 +11,7 @@ std::pair<bool,uint32_t> full_read (int fd, void *buf, uint32_t size)
     uint32_t total = 0;
     while (size > 0)
     {
-	suint32_t bytes = 0;
+	ssize_t bytes = 0;
 	do
 	{
 	    bytes = read (fd, p, size);
@@ -40,7 +40,7 @@ uint32_t full_write (int fd, const void *buf, uint32_t size)
     uint32_t total = 0;
     while (size > 0)
     {
-	suint32_t bytes = 0;
+	ssize_t bytes = 0;
 	do
 	{
 	    bytes = write (fd, p, size);
