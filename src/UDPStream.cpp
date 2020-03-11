@@ -31,13 +31,6 @@ UDPStream::~UDPStream ()
     {
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
     }
-    
-    this->enqueueSend ("ME");
-
-    do
-    {
-	std::this_thread::sleep_for (std::chrono::milliseconds (10));
-    } while  (m_bytesQueued);
 
     m_done = true;
     m_receiver.join ();
@@ -168,7 +161,35 @@ void UDPStream::onDataPacket (const std::string& payload)
 	m_nextSeq++;
     }
 }
+void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
+{
+    // if the data's too old (or a dup) just drop it entirely.
+    if (dseq == m_nextSeq)
+    {
+	// fast path
+	memcpy (m_recvBuff.wptr (), base, size);
+	m_nextSeq++;
+	m_recvBuff.wptrAdvance (size);
+    }
+    else
+    {
+	// out of order path
+	if (dseq > m_nextSeq)
+	{
+	    m_recvMap[dseq] = std::string (base, base+size);
+	}
+    }
+    while (m_recvMap.find (m_nextSeq) != m_recvMap.end ())
+    {
+	const std::string& pl = m_recvMap[m_nextSeq];
+	memcpy (m_recvBuff.wptr (), pl.c_str (), pl.size ());
+	m_recvBuff.wptrAdvance (pl.size ());
+	m_recvMap.erase (m_nextSeq);
+	m_nextSeq++;
+    }
 
+    
+}
 void UDPStream::onMetadataPacket (const std::string& payload)
 {
     char type = payload.c_str ()[0];
@@ -184,13 +205,19 @@ void UDPStream::onMetadataPacket (const std::string& payload)
     }
     
 }
-
+void UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv)
+{
+    if (!m_ptt.setRecv (seq, tsRecv))
+    {
+	fprintf (stderr, "Couldn't find matching packet\n");
+	abort ();
+    }
+}
 void UDPStream::receiverEntry (void)
 {
     while (!m_done)
     {
-	const auto& pkt = m_socket.recv ();
-	const std::string& buf = std::get<2>(pkt);
+	const auto [ts, raddr, buf] = m_socket.recv ();
 	if (!buf.size ())
 	{
 	    continue;  // timeout
@@ -198,30 +225,61 @@ void UDPStream::receiverEntry (void)
 
 	if (m_peer.size () == 0)
 	{
-	    m_peer = std::get<1>(pkt);
+	    m_peer = raddr;
 	}
-	uint32_t seq = ((uint32_t *)buf.c_str ())[0];
-	uint64_t ts = std::get<0>(pkt);
-	char type = *(4 + buf.c_str ());
-    
-	// either way, we update our list of times
-	m_tsRecv.emplace_back (seq, ts);
+
+	const char *base = buf.c_str ();
+	uint32_t seq = *((uint32_t *) base);
+	char type = *(4 + base);
+
 	switch (type)
 	{
-	case 'T':
-	    this->onTSReturnPacket (buf.substr (5));
+	case 'A':
+	{
+	    uint32_t asize = (buf.size () - 5) / (12); // 8(timestamp) +
+						       // 4(seq)
+	    for (int ii=0; ii < asize; ++ii)
+	    {
+		// TODO: this is so ugly, noone else thinks in bytes, fix this.
+		uint32_t aseq = *(uint32_t *)(base + 5 + (ii * 12));
+		uint64_t atsRecv = *(uint64_t *)(base + 5 + (ii * 12) + 4);
+		this->onRecvAck (aseq, atsRecv);
+	    }
 	    break;
+	}
 	case 'D':
-	    this->onDataPacket (buf.substr (5));
+	{
+	    uint32_t dseq = *((uint32_t *)(5 + base));
+	    const char *dbase = 9 + base;
+	    uint32_t dsize = buf.size () - 9;
+	    this->onRecvData (dseq, dbase, dsize);
+	    // send Ack for the data
+	    this->enqueueSend ("A" + std::string ((const char *)&seq, 4) + std::string ((const char*)&ts, 8));
 	    break;
-	case 'M':
-	    this->onMetadataPacket (buf.substr (5));
-	    break;
+	}
 	default:
 	    fprintf (stderr, "unexpected packet type '%c'(%d)\n", type, type);
 	    abort ();
 	    break;
 	}
+	// // either way, we update our list of times
+	// m_tsRecv.emplace_back (seq, ts);
+	// switch (type)
+	// {
+	// case 'T':
+	//     this->onTSReturnPacket (buf.substr (5));
+	//     break;
+	// case 'D':
+	//     this->onDataPacket (buf.substr (5));
+	//     break;
+	// case 'M':
+	//     this->onMetadataPacket (buf.substr (5));
+	//     break;
+	// default:
+	//     fprintf (stderr, "unexpected packet type '%c'(%d)\n", type, type);
+	//     abort ();
+	//     break;
+	// }
 
 	
     }
@@ -255,7 +313,7 @@ void UDPStream::controllerEntry (void)
 	    }
 	    m_ptt.readAdvance (1);
 	}
-	this->doTSReturn ();
+	// this->doTSReturn ();
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
     }
 }

@@ -58,6 +58,8 @@ private:
     void enqueueSend (const std::string& packet);
     void onTSReturnPacket (const std::string& payload);
     void onDataPacket (const std::string& payload);
+    void onRecvData (uint32_t dseq, const char *base, uint32_t size);
+    void onRecvAck (uint32_t seq, uint64_t tsRecv);
     void onMetadataPacket (const std::string& payload);
     void doTSReturn (void);
     uint64_t m_tsLast;

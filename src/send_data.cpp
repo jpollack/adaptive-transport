@@ -19,7 +19,7 @@ int main (int argc, char **argv)
 
     size_t blocksize = 1024 * 128;
     uint8_t tbuf[blocksize];
-    size_t nBytes;
+    uint32_t nBytes;
     bool eof = false;
     std::deque<double> xq, yq;
     
@@ -59,7 +59,7 @@ int main (int argc, char **argv)
 	}
 	
 	std::tie (eof, nBytes) = full_read (STDIN_FILENO, tbuf, blocksize);
-	ustream.send ((eof ? "E" : "D") + std::string (tbuf, tbuf+nBytes));
+	ustream.send ((eof ? "E" : "D") + std::string ((const char*)&nBytes, 4) + std::string (tbuf, tbuf+nBytes));
     } while (!eof);
     while (ustream.bytesQueued ())
     {

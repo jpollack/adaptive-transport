@@ -12,28 +12,25 @@ int main (int argc, char **argv)
 
     UDPStream ustream;
     ustream.setLocal (Address (argv[1], argv[2]));
-    while (!ustream.reof)
+    bool eof = false;
+    while (!eof)
     {
-	if (ustream.readable ())
-	{
-	    uint32_t bytes = ustream.readable ();
-	    full_write (STDOUT_FILENO, ustream.rptr (), bytes);
-	    ustream.rptrAdvance (bytes);
-	}
-	else
+	while (ustream.readable () == 0)
 	{
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	const uint8_t *base = ustream.rptr ();
+	eof = (base[0] == 'E');
+	uint32_t size = *(uint32_t *)(base + 1);
+	ustream.rptrAdvance (5);
+	while (size > ustream.readable ())
+	{
+	    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
 
-    while (ustream.readable ())
-    {
-	uint32_t bytes = ustream.readable ();
-	full_write (STDOUT_FILENO, ustream.rptr (), bytes);
-	ustream.rptrAdvance (bytes);
+	full_write (STDOUT_FILENO, ustream.rptr (), size);
+	ustream.rptrAdvance (size);
     }
-
 
 }
 
