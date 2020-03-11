@@ -32,8 +32,6 @@ public:
     
     void setLocal (const Address& addr);
     void setRemote (const Address& addr);
-    void setBandwidth (uint32_t other);
-    uint32_t bandwidth (void) const;
     uint32_t bytesQueued (void) const;
     std::function<void(uint32_t seq)> onDroppedFunc;
     std::function<void(uint32_t seq, uint64_t tsSent, uint64_t tsRecv)> onAckedFunc;
@@ -45,7 +43,6 @@ public:
 private:
     PayloadQueue m_sendQueue;
     PTT m_ptt;
-    uint32_t m_mtu;
     bool m_done;
     uint32_t m_nextSeq;
     CircBuff m_recvBuff;
@@ -63,7 +60,6 @@ private:
     void onDataPacket (const std::string& payload);
     void onMetadataPacket (const std::string& payload);
     void doTSReturn (void);
-    uint32_t m_bandwidth;
     uint64_t m_tsLast;
     uint32_t m_bytesLast;
     std::vector<std::pair<uint32_t,uint64_t> > m_tsRecv;

@@ -16,7 +16,6 @@ UDPStream::UDPStream ()
       m_controller (&UDPStream::controllerEntry, this),
       m_bytesQueued (0)
 {
-    m_bandwidth = 1024*1024;
     m_tsLast = 0;
     m_bytesLast = 0;
     m_socket.set_timestamps ();
@@ -71,7 +70,7 @@ void UDPStream::setRemote (const Address& addr)
 
 uint64_t UDPStream::getDelay (uint32_t size)
 {
-    return (uint64_t)((1000000 * (m_bytesLast + size)) / m_bandwidth);
+    return (uint64_t)((1000000 * (m_bytesLast + size)) / bandwidth);
 }
 
 void UDPStream::enqueueSend (const std::string& packet)
@@ -116,19 +115,9 @@ void UDPStream::send (const std::string& msg)
     }
 }
 
-uint32_t UDPStream::bytesQueued (void)
+uint32_t UDPStream::bytesQueued (void) const
 {
     return m_bytesQueued;
-}
-
-void UDPStream::setBandwidth (uint32_t other)
-{
-    m_bandwidth = other;
-}
-
-uint32_t UDPStream::bandwidth (void) const
-{
-    return m_bandwidth;
 }
 
 void UDPStream::onTSReturnPacket (const std::string& payload)
