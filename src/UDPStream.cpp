@@ -25,8 +25,6 @@ UDPStream::UDPStream ()
 
 UDPStream::~UDPStream ()
 {
-    // TODO: should wait until all bytes queued are sent, and no retransmits
-    // needed. this just does the former?
     while (m_bytesQueued && m_sendMap.size ())
     {
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
@@ -113,54 +111,6 @@ uint32_t UDPStream::bytesQueued (void) const
     return m_bytesQueued;
 }
 
-void UDPStream::onTSReturnPacket (const std::string& payload)
-{
-    if (TSReturn::Valid (payload))
-    {
-	// magic matches.  so this is a tsreturn packet.
-	for (const auto& tse : TSReturn::FromString (payload))
-	{
-	    if (!m_ptt.setRecv (tse.first, tse.second))
-	    {
-		fprintf (stderr, "Couldn't find matching packet\n");
-		abort ();
-	    }
-	}
-	
-	return;
-    }
-    else
-    {
-	abort ();
-    }
-    
-}
-
-// void UDPStream::onDataPacket (const std::string& payload)
-// {
-//     // just a normal data packet.
-//     uint32_t dseq = ((uint32_t *)payload.c_str ())[0];
-//     if (dseq == m_nextSeq)
-//     {
-// 	// fast path
-// 	memcpy (m_recvBuff.wptr (), 4+payload.c_str (), payload.size ()-4);
-// 	m_recvBuff.wptrAdvance (payload.size () - 4);
-// 	m_nextSeq++;
-//     }
-//     else
-//     {
-// 	// out of order path
-// 	m_recvMap[dseq] = payload.substr (4);
-//     }
-//     while (m_recvMap.find (m_nextSeq) != m_recvMap.end ())
-//     {
-// 	const std::string& pl = m_recvMap[m_nextSeq];
-// 	memcpy (m_recvBuff.wptr (), pl.c_str () + 4, pl.size () - 4);
-// 	m_recvBuff.wptrAdvance (pl.size () - 4);
-// 	m_recvMap.erase (m_nextSeq);
-// 	m_nextSeq++;
-//     }
-// }
 void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
 {
     // if the data's too old (or a dup) just drop it entirely.
@@ -190,21 +140,7 @@ void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
 
     
 }
-// void UDPStream::onMetadataPacket (const std::string& payload)
-// {
-//     char type = payload.c_str ()[0];
-//     switch(type)
-//     {
-//     case 'E':
-// 	// eof
-// 	reof = true;
-// 	break;
-//     default:
-// 	fprintf (stderr, "unexpected metadata type '%c'(%d)\n", type, type);
-// 	abort ();
-//     }
-    
-// }
+
 void UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv)
 {
     if (!m_ptt.setRecv (seq, tsRecv))
@@ -262,25 +198,6 @@ void UDPStream::receiverEntry (void)
 	    abort ();
 	    break;
 	}
-	// // either way, we update our list of times
-	// m_tsRecv.emplace_back (seq, ts);
-	// switch (type)
-	// {
-	// case 'T':
-	//     this->onTSReturnPacket (buf.substr (5));
-	//     break;
-	// case 'D':
-	//     this->onDataPacket (buf.substr (5));
-	//     break;
-	// case 'M':
-	//     this->onMetadataPacket (buf.substr (5));
-	//     break;
-	// default:
-	//     fprintf (stderr, "unexpected packet type '%c'(%d)\n", type, type);
-	//     abort ();
-	//     break;
-	// }
-
 	
     }
 }
@@ -313,41 +230,7 @@ void UDPStream::controllerEntry (void)
 	    }
 	    m_ptt.readAdvance (1);
 	}
-	// this->doTSReturn ();
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
     }
 }
-
-void UDPStream::doTSReturn ()
-{
-    // TODO convert tsrecv into something on a circ buffer
-    std::string payload = TSReturn::ToString (m_tsRecv);
-
-    if (payload.size () > (mtu - 16)) // or it's been too long since the
-					// last tsretrn
-    {
-	m_tsRecv.clear ();
-	this->enqueueSend ("T" + payload);
-    }
-    
-}
-// bool UDPStream::send (const std::string& payload)
-// {
-//     // sending a zero length packet makes no sense
-//     if (m_sendBuff.free () <= payload.size ())
-//     {
-// 	return false;
-//     }
-
-//     memcpy (m_sendBuff.wptr (), payload.c_str (), payload.size ());
-//     m_sendBuff.wptrAdvance (payload.size ());
-//     return true;
-// }
-
-// std::string UDPStream::recv (void)
-// {
-//     std::string payload;
-//     m_recvQueue.wait_dequeue (payload);
-//     return payload;
-// }
 
