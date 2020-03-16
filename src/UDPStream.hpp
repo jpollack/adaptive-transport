@@ -11,13 +11,12 @@
 #include "Address.hpp"
 #include <atomic>
 #include <functional>
+#include "RTXQueue.hpp"
 
 /* This should implement packetiszing of the data, retransmits, and timing */
 
 class UDPStream
 {
-private:
-    using PayloadQueue = moodycamel::BlockingConcurrentQueue<std::string>;
 public:
     UDPStream ();
     ~UDPStream ();
@@ -37,11 +36,19 @@ public:
     std::function<void(uint32_t seq)> onDroppedFunc;
     std::function<void(uint32_t seq, uint64_t tsSent, uint64_t tsRecv)> onAckedFunc;
 
-    bool reof;
     uint32_t bandwidth;
     uint32_t mtu;
     
 private:
+    struct Payload
+    {
+	bool reliable;
+	bool bwlimited;
+	std::string payload;
+    };
+    
+    using PayloadQueue = moodycamel::BlockingConcurrentQueue<Payload>;
+    RTXQueue m_rtxq;
     PayloadQueue m_sendQueue;
     PTT m_ptt;
     bool m_done;
@@ -56,14 +63,12 @@ private:
     void receiverEntry (void);
     void controllerEntry (void);
     uint64_t getDelay (uint32_t size);
-    void enqueueSend (const std::string& packet);
+    void enqueueSend (const std::string& payload, bool reliable);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);
-    void onRecvAck (uint32_t seq, uint64_t tsRecv);
+    uint64_t onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv);
     uint64_t m_tsLast;
     uint32_t m_bytesLast;
-    std::vector<std::pair<uint32_t,uint64_t> > m_tsRecv;
     
-    std::unordered_map<uint32_t,std::string> m_sendMap;
     std::unordered_map<uint32_t,std::string> m_recvMap;
     UDPSocket m_socket;
     Address m_peer;
