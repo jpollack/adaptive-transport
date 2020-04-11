@@ -38,6 +38,7 @@ public:
 
     uint32_t bandwidth;
     uint32_t mtu;
+    std::atomic<uint64_t> rtt;
     
 private:
     struct Payload
@@ -58,10 +59,13 @@ private:
     std::thread m_sender;
     std::thread m_receiver;
     std::thread m_controller;
+    std::thread m_limiter;
     std::atomic<uint32_t> m_bytesQueued;
     void senderEntry (void);
     void receiverEntry (void);
     void controllerEntry (void);
+    void limiterEntry (void);
+    void limiterStep (void);
     uint64_t getDelay (uint32_t size);
     void enqueueSend (const std::string& payload, bool reliable);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);

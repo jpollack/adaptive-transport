@@ -19,10 +19,10 @@ Plot::~Plot (void)
     m_thread.join ();
 }
 
-void Plot::plot (const std::vector<double>& xv, const std::vector<double>&yv)
+void Plot::plot (const std::vector<double>& xv, const std::vector<double>&yv, const std::vector<double>& zv)
 {
     m_numQueued++;
-    m_queue.enqueue ({xv,yv});
+    m_queue.enqueue ({xv,yv, zv});
 }
 
 void Plot::plotEntry (void)
@@ -31,14 +31,15 @@ void Plot::plotEntry (void)
     plt::figure ();
     while (!m_done)
     {
-	std::tuple<std::vector<double>,std::vector<double>> el;
+	std::tuple<std::vector<double>,std::vector<double>,std::vector<double>> el;
 	if (!m_queue.wait_dequeue_timed (el, std::chrono::milliseconds (100)))
 	{
 	    continue;
 	}
 	plt::clf ();
 	plt::plot (std::get<0>(el), std::get<1>(el));
-	plt::ylim (0, 100000);
+	plt::plot (std::get<0>(el), std::get<2>(el));
+	plt::ylim (-10000, 10000);
 	// ipo.update (std::get<0>(el), std::get<1>(el));
 	plt::pause (0.001);
 	m_numQueued--;

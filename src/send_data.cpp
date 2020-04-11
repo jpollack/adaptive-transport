@@ -6,6 +6,9 @@
 #include "matplotlibcpp.h"
 #include "Plot.hpp"
 #include <cstdlib>
+#include "ParamTracker.hpp"
+#include <random>
+#include "Timing.hpp"
 
 namespace plt = matplotlibcpp;
 
@@ -17,6 +20,8 @@ int main (int argc, char **argv)
 	return -1;
     }
 
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> distribution(0.0,1.0);
 
     size_t blocksize = 1024 * 128;
     uint8_t tbuf[blocksize];
@@ -28,7 +33,7 @@ int main (int argc, char **argv)
     int wPer = 50;
 
     Plot po;
-
+    ParamTracker pt;
     UDPStream ustream;
     Address peer (argv[1], argv[2]);
     ustream.setRemote (peer);
@@ -38,18 +43,43 @@ int main (int argc, char **argv)
 				{
 				    fprintf (stderr, "Dropped %d\n", seq);
 				};
+    uint64_t tsUpdated = MicrosecondsSinceEpoch () + 100000;
     ustream.onAckedFunc = [&](uint32_t seq, uint64_t tsSent, uint64_t tsRecv)
 			      {
-				  xq.push_back (tsSent);
-				  yq.push_back (tsRecv - tsSent);
-
-				  if ( (xq.size () > (windLen + wPer)) && ((xq.size () % wPer) == 0))
+				  pt.update (seq, tsSent, tsRecv, 0);
+				  if (tsSent > tsUpdated)
+				  {
+				      double gbar = (double)pt.Q[0].g_owd_max_ma / 200.0;
+				      double pbackoff = 1.0 - exp (-1.0 * gbar);
+				      double x = distribution (generator);
+				      tsUpdated = MicrosecondsSinceEpoch ();
+				      bool didBackoff = false;
+				      if ((pt.Q[0].g_owd_min_ma > 0) && (pbackoff > x))
+				      {
+					  // backoff
+					  ustream.bandwidth = (double)ustream.bandwidth * 0.9;
+					  tsUpdated += 1000000;
+					  didBackoff = true;
+				      }
+				      else
+				      {
+					  ustream.bandwidth += (1024 * 8);				      
+				      }
+				      fprintf (stderr, "%s\t%d\t%d\t%d\t%d\n", (didBackoff ? "DOWN" : "UP" ), ustream.bandwidth, pt.Q[0].owd_min, pt.Q[0].g_owd_min_ma, pt.Q[0].g_owd_max_ma);
+				  }
+				  
+				  if ( (pt.Q.size () > (windLen + wPer)) && ((pt.Q.size () % wPer) == 0))
 				  {
 				      /// copy to vectors
-				      std::vector<double> xv (xq.begin (), xq.end ());
-				      std::vector<double> yv (yq.begin (), yq.end ());
-				      po.plot (xv,yv);
-				      for (int ii=0; ii <wPer; ++ii) { xq.pop_front (); yq.pop_front (); }
+				      std::vector<double> xv, yv, zv;
+				      for (const auto& p : pt.Q)
+				      {
+					  xv.push_back (p.tsSent);
+					  yv.push_back (p.g_owd_min_ma);
+					  zv.push_back (p.g_owd_max_ma);
+				      }
+				      po.plot (xv,yv,zv);
+				      for (int ii=0; ii <wPer; ++ii) { pt.Q.pop_back (); }
 				  }
 				  // fprintf (stderr, "%u\t%lu\t%lu\n", seq, tsSent, tsRecv);
 			      };

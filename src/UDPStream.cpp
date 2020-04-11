@@ -6,6 +6,7 @@
 UDPStream::UDPStream ()
     : bandwidth (1024*1024),
       mtu (1400),
+      rtt (1000000),
       m_done (false),
       m_nextSeq (1),
       m_recvBuff (1024),
@@ -13,6 +14,7 @@ UDPStream::UDPStream ()
       m_sender (&UDPStream::senderEntry, this),
       m_receiver (&UDPStream::receiverEntry, this),
       m_controller (&UDPStream::controllerEntry, this),
+      m_limiter (&UDPStream::limiterEntry, this),
       m_bytesQueued (0)
 {
     m_tsLast = 0;
@@ -155,7 +157,8 @@ uint64_t UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv)
 	// abort ();
     }
     auto [tsSent, payload] = m_rtxq.dropPacket (seq);
-    return ackRecv - tsSent;
+    uint64_t rtt = ackRecv - tsSent;
+    return rtt;
 }
 
 
@@ -195,8 +198,7 @@ void UDPStream::receiverEntry (void)
 	    // TODO: this is so ugly, noone else thinks in bytes, fix this.
 	    uint32_t aseq = *(uint32_t *)(base + 5);
 	    uint64_t atsRecv = *(uint64_t *)(base + 5 + 4);
-	    uint64_t rtt = this->onRecvAck (aseq, atsRecv, ts);
-	    fprintf (stderr, "rtt %d\n", rtt);
+	    rtt = this->onRecvAck (aseq, atsRecv, ts);
 	}
 	else if (type == 'D')
 	{
@@ -243,7 +245,8 @@ void UDPStream::controllerEntry (void)
 	    m_ptt.readAdvance (1);
 	}
 	uint64_t now = MicrosecondsSinceEpoch ();
-	for (const auto& seq : m_rtxq.olderThan (now - 200000))
+	// TODO: replace with rtt + 2 stdev
+	for (const auto& seq : m_rtxq.olderThan (now - (2*rtt)))
 	{
 	    auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
 	    this->enqueueSend (payload, true);
@@ -252,3 +255,30 @@ void UDPStream::controllerEntry (void)
     }
 }
 
+void UDPStream::limiterStep ()
+{
+    
+}
+
+void UDPStream::limiterEntry (void)
+{
+    while (!m_done)
+    {
+	/* packet stats:
+	   tsNow
+	   if tsUpdated > tsSent
+		skip
+	   droppedRatio [0,1]
+	   yv = tsDiff = tsRecv - tsSent
+	   xv = tsSent - tsSent(1)
+	   do linear regression to get slope and intercept
+	   if slope > threshold, then slow down
+	   
+	   
+
+	 */
+	
+	this->limiterStep ();
+	std::this_thread::sleep_for (std::chrono::milliseconds (10));
+    }
+}

@@ -10,7 +10,7 @@ find_package(Python2 COMPONENTS Development)
 
 include_directories(${Python2_INCLUDE_DIRS} ${Python2_NumPy_INCLUDE_DIRS})
 
-set(SOURCE_COMMON src/Address.cpp src/FileDescriptor.cpp src/Poller.cpp src/Socket.cpp src/TSReturn.cpp src/PTT.cpp src/fullio.cpp src/UDPStream.cpp src/Timing.cpp src/CircBuff.cpp src/Plot.cpp src/RTXQueue.cpp)
+set(SOURCE_COMMON src/Address.cpp src/FileDescriptor.cpp src/Poller.cpp src/Socket.cpp src/TSReturn.cpp src/PTT.cpp src/fullio.cpp src/UDPStream.cpp src/Timing.cpp src/CircBuff.cpp src/Plot.cpp src/RTXQueue.cpp src/ParamTracker.cpp)
 
 add_executable(send_data ${SOURCE_COMMON} src/send_data.cpp)
 target_link_libraries (send_data Threads::Threads Python2::Python)
