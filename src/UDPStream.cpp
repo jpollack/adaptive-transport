@@ -13,9 +13,10 @@ UDPStream::UDPStream ()
       m_dseq (1),
       m_sender (&UDPStream::senderEntry, this),
       m_receiver (&UDPStream::receiverEntry, this),
-      m_controller (&UDPStream::controllerEntry, this),
+      m_retransmit (&UDPStream::retransmitEntry, this),
       m_limiter (&UDPStream::limiterEntry, this),
-      m_bytesQueued (0)
+      m_bytesQueued (0),
+      m_tsUpdated (0)
 {
     m_tsLast = 0;
     m_bytesLast = 0;
@@ -33,7 +34,7 @@ UDPStream::~UDPStream ()
 
     m_done = true;
     m_receiver.join ();
-    m_controller.join ();
+    m_retransmit.join ();
     m_sender.join ();
 }
 
@@ -219,33 +220,15 @@ void UDPStream::receiverEntry (void)
 	
     }
 }
-void UDPStream::controllerEntry (void)
+
+// everything older than now-2*rtt is retransmitted.
+void UDPStream::retransmitEntry (void)
 {
     while (!m_done)
     {
-	while (m_ptt.readable ())
-	{
-	    const PTT::Metadata *mp = m_ptt.rptr ();
-	    if (mp->tsRecv)
-	    {
-		// Do something with the time diff
-		if (onAckedFunc)
-		{
-		    onAckedFunc (mp->seq, mp->tsSent, mp->tsRecv);
-		}
-	    }
-	    else
-	    {
-		// it's dropped, so retransmit
-		if (onDroppedFunc)
-		{
-		    onDroppedFunc (mp->seq);
-		}
-	    }
-	    m_ptt.readAdvance (1);
-	}
-	uint64_t now = MicrosecondsSinceEpoch ();
 	// TODO: replace with rtt + 2 stdev
+	uint64_t now = MicrosecondsSinceEpoch ();
+
 	for (const auto& seq : m_rtxq.olderThan (now - (2*rtt)))
 	{
 	    auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
@@ -257,17 +240,11 @@ void UDPStream::controllerEntry (void)
 
 void UDPStream::limiterStep ()
 {
-    
-}
+    // tsUpdated -- timestamp when we last made a change to the send
+    // rate. Ignore all data from packets sent before this time.
 
-void UDPStream::limiterEntry (void)
-{
-    while (!m_done)
-    {
 	/* packet stats:
 	   tsNow
-	   if tsUpdated > tsSent
-		skip
 	   droppedRatio [0,1]
 	   yv = tsDiff = tsRecv - tsSent
 	   xv = tsSent - tsSent(1)
@@ -277,8 +254,66 @@ void UDPStream::limiterEntry (void)
 	   
 
 	 */
+    // read all available entries from m_ptt into a local vector
+
+    int nrecv = 0;
+    int ndropped = 0;
+
+    std::vector<uint32_t> yv;
+    std::vector<uint32_t> xv;
+
+    uint64_t x0 = 0;
+    while (m_ptt.readable ())
+    {
+	const PTT::Metadata *mp = m_ptt.rptr ();
+	if (onPacketMetadata)
+	{
+	    onPacketMetadata (mp->seq, mp->tsSent, mp->tsRecv);
+	}
 	
-	this->limiterStep ();
-	std::this_thread::sleep_for (std::chrono::milliseconds (10));
+	if (m_tsUpdated > mp->tsSent)
+	{
+	    continue;
+	}
+
+	if (mp->tsRecv)
+	{
+	    // Do something with the time diff
+	    if (!nrecv)
+	    {
+		x0 = mp->tsSent;
+	    }
+	    nrecv++;
+	    yv.emplace_back (mp->tsRecv - mp->tsSent);
+	    xv.emplace_back (mp->tsSent - x0);
+	}
+	else
+	{
+	    ndropped++;
+	}
+	m_ptt.readAdvance (1);
+    }
+
+    printf ("(%d,%d)\t", nrecv, ndropped);
+    for (auto y : yv)
+    {
+	printf ("%d ", y);
+    }
+    printf ("\n");
+    
+    
+}
+
+void UDPStream::limiterEntry (void)
+{
+    int minPackets = 8;
+
+    while (!m_done)
+    {
+	if (m_ptt.readable () >= minPackets)
+	{
+	    this->limiterStep ();
+	}
+	std::this_thread::sleep_for (std::chrono::milliseconds (2));
     }
 }

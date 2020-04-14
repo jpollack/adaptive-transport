@@ -33,8 +33,8 @@ public:
     void setLocal (const Address& addr);
     void setRemote (const Address& addr);
     uint32_t bytesQueued (void) const;
-    std::function<void(uint32_t seq)> onDroppedFunc;
-    std::function<void(uint32_t seq, uint64_t tsSent, uint64_t tsRecv)> onAckedFunc;
+    // allows for easily printing timing information.  HACK.
+    std::function<void(uint32_t seq, uint64_t tsSent, uint64_t tsRecv)> onPacketMetadata;
 
     uint32_t bandwidth;
     uint32_t mtu;
@@ -58,12 +58,13 @@ private:
     uint32_t m_dseq;
     std::thread m_sender;
     std::thread m_receiver;
-    std::thread m_controller;
+    std::thread m_retransmit;
     std::thread m_limiter;
     std::atomic<uint32_t> m_bytesQueued;
+    uint64_t m_tsUpdated;
     void senderEntry (void);
     void receiverEntry (void);
-    void controllerEntry (void);
+    void retransmitEntry (void);
     void limiterEntry (void);
     void limiterStep (void);
     uint64_t getDelay (uint32_t size);
