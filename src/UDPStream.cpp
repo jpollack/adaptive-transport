@@ -314,6 +314,6 @@ void UDPStream::limiterEntry (void)
 	{
 	    this->limiterStep ();
 	}
-	std::this_thread::sleep_for (std::chrono::milliseconds (2));
+	std::this_thread::sleep_for (std::chrono::milliseconds (5));
     }
 }
