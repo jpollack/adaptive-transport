@@ -66,7 +66,7 @@ private:
     void receiverEntry (void);
     void retransmitEntry (void);
     void limiterEntry (void);
-    void limiterStep (void);
+    std::tuple<int,int,int,int> limiterStats (void);
     uint64_t getDelay (uint32_t size);
     void enqueueSend (const std::string& payload, bool reliable);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);

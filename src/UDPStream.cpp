@@ -1,6 +1,9 @@
 #include "UDPStream.hpp"
 #include "Timing.hpp"
 #include <algorithm>
+#include <queue>
+#include <random>
+
 // #include "TSReturn.hpp"
 
 UDPStream::UDPStream ()
@@ -238,7 +241,7 @@ void UDPStream::retransmitEntry (void)
     }
 }
 
-void UDPStream::limiterStep ()
+std::tuple<int,int,int,int> UDPStream::limiterStats ()
 {
     // tsUpdated -- timestamp when we last made a change to the send
     // rate. Ignore all data from packets sent before this time.
@@ -259,9 +262,12 @@ void UDPStream::limiterStep ()
     int nrecv = 0;
     int ndropped = 0;
 
-    std::vector<uint32_t> yv;
-    std::vector<uint32_t> xv;
+    std::vector<int> yv;
+    std::vector<int> xv;
 
+    int ymin;
+    int ymax;
+    
     uint64_t x0 = 0;
     while (m_ptt.readable ())
     {
@@ -273,6 +279,7 @@ void UDPStream::limiterStep ()
 	
 	if (m_tsUpdated > mp->tsSent)
 	{
+	    m_ptt.readAdvance (1);
 	    continue;
 	}
 
@@ -282,10 +289,21 @@ void UDPStream::limiterStep ()
 	    if (!nrecv)
 	    {
 		x0 = mp->tsSent;
+		ymin = mp->tsRecv - mp->tsSent;
+		ymax = mp->tsRecv - mp->tsSent;
 	    }
-	    nrecv++;
 	    yv.emplace_back (mp->tsRecv - mp->tsSent);
 	    xv.emplace_back (mp->tsSent - x0);
+	    if (yv.back () < ymin)
+	    {
+		ymin = yv.back ();
+	    }
+	    if (yv.back () > ymax)
+	    {
+		ymax = yv.back ();
+	    }
+	    nrecv++;
+	    
 	}
 	else
 	{
@@ -294,25 +312,97 @@ void UDPStream::limiterStep ()
 	m_ptt.readAdvance (1);
     }
 
-    printf ("(%d,%d)\t", nrecv, ndropped);
-    for (auto y : yv)
-    {
-	printf ("%d ", y);
-    }
-    printf ("\n");
-    
+    return std::make_tuple (ymin,ymax,nrecv,ndropped);
     
 }
 
 void UDPStream::limiterEntry (void)
 {
-    int minPackets = 8;
-
+    int minPackets = 12;
+    int wnd = 4;
+    
+    int iter = 0;
+    std::queue<int> q;
+    int y0 = 0;
+    int symin0 = 0;
+    int symin1 = 0;
+    int gymin = 0;
+    int cs = 0;
+    double sc = 0;
+    int state = 0;
+    
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> distribution(0.0,1.0);
     while (!m_done)
     {
 	if (m_ptt.readable () >= minPackets)
 	{
-	    this->limiterStep ();
+	    auto [ymin, ymax, nrecv, ndropped] = this->limiterStats ();
+	    if ((nrecv + ndropped) == 0)
+	    {
+		continue;
+	    }
+	    iter++;
+	    q.push (ymin);
+	    y0 = y0 + ymin;
+	    if (q.size () < wnd)
+	    {
+		continue;
+	    }
+	    while (q.size () > wnd)
+	    {
+		y0 = y0 - q.front ();
+		q.pop ();
+	    }
+	    symin1 = symin0;
+	    symin0 = y0 / wnd;
+	    if (symin1)
+	    {
+
+	    gymin = symin0 - symin1;
+	    cs = cs + gymin;
+	    sc = (double)cs /(double)symin1;
+	    state = 0;
+	    if (sc > 0.20)
+	    {
+		state = -1;
+	    }
+	    if (ndropped > 1)
+	    {
+		state = -1;
+	    }
+	    if (sc < -0.20)
+	    {
+		cs = 0;
+		m_tsUpdated = MicrosecondsSinceEpoch ();
+	    }
+
+	    double x = distribution (generator);
+	    if ((state == 0) && (x<0.25))
+	    {
+		state = 1;
+	    }
+
+	    printf ("%d\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
+
+	    if (state)
+	    {
+		if (state < 0)
+		{
+		    this->bandwidth = (double)this->bandwidth * 0.75;
+		    cs = 0;
+		    m_tsUpdated = MicrosecondsSinceEpoch ();
+		    
+		}
+
+		if (state > 0)
+		{
+		    this->bandwidth += ((double)this->mtu / ((double)symin0 / 1000000.0));
+		}
+
+	    }
+	    }
+	    
 	}
 	std::this_thread::sleep_for (std::chrono::milliseconds (5));
     }

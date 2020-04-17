@@ -3,14 +3,14 @@
 #include "fullio.hpp"
 #include <unistd.h>
 #include <deque>
-#include "matplotlibcpp.h"
-#include "Plot.hpp"
+// #include "matplotlibcpp.h"
+// #include "Plot.hpp"
 #include <cstdlib>
-#include "ParamTracker.hpp"
+// #include "ParamTracker.hpp"
 #include <random>
 #include "Timing.hpp"
 
-namespace plt = matplotlibcpp;
+// namespace plt = matplotlibcpp;
 
 int main (int argc, char **argv)
 {
@@ -32,8 +32,8 @@ int main (int argc, char **argv)
     int windLen = 200;
     int wPer = 50;
 
-    Plot po;
-    ParamTracker pt;
+    // Plot po;
+    // ParamTracker pt;
     UDPStream ustream;
     Address peer (argv[1], argv[2]);
     ustream.setRemote (peer);

@@ -29,7 +29,7 @@ if (ii > 4)
     ctx.gsymin(ii) = (ctx.symin(ii) - ctx.symin(ii-1));
     ctx.gsymax(ii) = (ctx.symax(ii) - ctx.symax(ii-1));
     ctx.csymin(ii) = sum(ctx.gsymin(ctx.li:ii));
-    sc = ctx.csymin(ii) / abs(ctx.symin(ii));
+    sc = ctx.csymin(ii) / abs(ctx.symin(ii-1));
 end
 ctx.state(ii) = 0;
 

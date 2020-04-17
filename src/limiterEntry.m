@@ -4,7 +4,9 @@
 clear all;
 close all;
 
-fname = '../build/metadata_4000.tsv';
+% fname = '../build/metadata.tsv';
+fname = '/home/joshua/metadata_c2h_20m.tsv';
+
 fid = fopen (fname);
 C = textscan(fid, '%u64\t%u64\t%u64', 'CollectOutput', 1);
 fclose (fid);
