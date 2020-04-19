@@ -198,9 +198,8 @@ void UDPStream::receiverEntry (void)
 	{
 	    // uint32_t dseq = *((uint32_t *)(5 + base));
 	    // TODO: this is so ugly, noone else thinks in bytes, fix this.
-	    uint32_t aseq = *(uint32_t *)(base + 5);
-	    uint64_t atsRecv = *(uint64_t *)(base + 5 + 4);
-	    rtt = this->onRecvAck (aseq, atsRecv, ts);
+	    uint64_t atsRecv = *(uint64_t *)(base + 5);
+	    rtt = this->onRecvAck (seq, atsRecv, ts);
 	}
 	else if (type == 'D')
 	{
@@ -209,9 +208,12 @@ void UDPStream::receiverEntry (void)
 	    uint32_t dsize = buf.size () - 9;
 	    this->onRecvData (dseq, dbase, dsize);
 	    // send Ack for the data
-	    this->enqueueSend ("A"
-			       + std::string ((const char *)&seq, 4)
-			       + std::string ((const char*)&ts, 8), false);
+
+	    m_socket.sendto (m_peer,
+			     std::string ((const char *)&seq, 4)
+			     + "A"
+			     + std::string ((const char*)&ts, 8));
+
 	}
 	else
 	{
