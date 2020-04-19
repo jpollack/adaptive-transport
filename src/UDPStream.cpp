@@ -80,15 +80,14 @@ void UDPStream::senderEntry (void)
 	Payload pl;
 	if (!m_sendQueue.wait_dequeue_timed (pl, std::chrono::milliseconds (100)))
 	{
-	    // fprintf (stderr, "sendQueue.deque timeout, retrying\n");
-	    continue;
+	    continue; // timeout
 	}
+
 	if (pl.bwlimited)
 	{
 	    while (!tb.consume (pl.payload.size (), bandwidth, 128*1024))
 	    {
-		// not sendable right now
-		std::this_thread::yield ();
+		std::this_thread::yield ();		// not sendable right now
 	    }
 	    // sendable
 	}
@@ -230,14 +229,15 @@ void UDPStream::retransmitEntry (void)
     {
 	// TODO: replace with rtt + 2 stdev
 	uint64_t now = MicrosecondsSinceEpoch ();
-
+	
 	for (const auto& seq : m_rtxq.olderThan (now - (2*rtt)))
 	{
 	    auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
 	    this->enqueueSend (payload, true);
 	}
+	
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
-    }
+    }	
 }
 
 std::tuple<int,int,int,int> UDPStream::limiterStats ()

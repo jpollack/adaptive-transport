@@ -22,15 +22,10 @@ int main (int argc, char **argv)
     size_t blocksize = 1024 * 128;
     uint8_t tbuf[blocksize];
     
-    UDPStream ustream;
-    ustream.setLocal (Address (argv[1], argv[2]));
-
-    // ustream.bandwidth = std::atoi (argv[3]);
-    // ustream.updateBandwidth = std::atoi (argv[4]);
-
-
     while (true)
     {
+	UDPStream ustream;
+	ustream.setLocal (Address (argv[1], argv[2]));
 	// alternate between listening for a new "connection", and sending the
 	// number of requested bytes.
 
