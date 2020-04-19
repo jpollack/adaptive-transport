@@ -386,7 +386,7 @@ void UDPStream::limiterEntry (void)
 
 		printf ("%d\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
 
-		if (state)
+		if (state && updateBandwidth)
 		{
 		    if (state < 0)
 		    {

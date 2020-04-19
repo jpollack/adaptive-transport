@@ -39,7 +39,7 @@ public:
     uint32_t bandwidth;
     uint32_t mtu;
     std::atomic<uint64_t> rtt;
-    
+    bool updateBandwidth;
 private:
     struct Payload
     {

@@ -20,9 +20,10 @@ int main (int argc, char **argv)
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 	const uint8_t *base = ustream.rptr ();
-	eof = (base[0] == 'E');
-	uint32_t size = *(uint32_t *)(base + 1);
-	ustream.rptrAdvance (5);
+	uint32_t size = *(uint32_t *)base;
+	eof = (size >> 31);
+	size &= ~(1 << 31);
+	ustream.rptrAdvance (4);
 	while (size > ustream.readable ())
 	{
 	    std::this_thread::sleep_for(std::chrono::milliseconds(1));
