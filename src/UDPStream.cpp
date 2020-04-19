@@ -9,7 +9,8 @@
 UDPStream::UDPStream ()
     : bandwidth (1024*1024),
       mtu (1400),
-      rtt (1000000),
+      rtt (1000000), // initilize to 1 second.
+      updateBandwidth (true),
       m_done (false),
       m_nextSeq (1),
       m_recvBuff (1024),
@@ -246,17 +247,17 @@ std::tuple<int,int,int,int> UDPStream::limiterStats ()
     // tsUpdated -- timestamp when we last made a change to the send
     // rate. Ignore all data from packets sent before this time.
 
-	/* packet stats:
-	   tsNow
-	   droppedRatio [0,1]
-	   yv = tsDiff = tsRecv - tsSent
-	   xv = tsSent - tsSent(1)
-	   do linear regression to get slope and intercept
-	   if slope > threshold, then slow down
+    /* packet stats:
+       tsNow
+       droppedRatio [0,1]
+       yv = tsDiff = tsRecv - tsSent
+       xv = tsSent - tsSent(1)
+       do linear regression to get slope and intercept
+       if slope > threshold, then slow down
 	   
 	   
 
-	 */
+    */
     // read all available entries from m_ptt into a local vector
 
     int nrecv = 0;
@@ -359,48 +360,48 @@ void UDPStream::limiterEntry (void)
 	    if (symin1)
 	    {
 
-	    gymin = symin0 - symin1;
-	    cs = cs + gymin;
-	    sc = (double)cs /(double)symin1;
-	    state = 0;
-	    if (sc > 0.20)
-	    {
-		state = -1;
-	    }
-	    if (ndropped > 1)
-	    {
-		state = -1;
-	    }
-	    if (sc < -0.20)
-	    {
-		cs = 0;
-		m_tsUpdated = MicrosecondsSinceEpoch ();
-	    }
-
-	    double x = distribution (generator);
-	    if ((state == 0) && (x<0.25))
-	    {
-		state = 1;
-	    }
-
-	    printf ("%d\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
-
-	    if (state)
-	    {
-		if (state < 0)
+		gymin = symin0 - symin1;
+		cs = cs + gymin;
+		sc = (double)cs /(double)symin1;
+		state = 0;
+		if (sc > 0.20)
 		{
-		    this->bandwidth = (double)this->bandwidth * 0.75;
+		    state = -1;
+		}
+		if (ndropped > 1)
+		{
+		    state = -1;
+		}
+		if (sc < -0.20)
+		{
 		    cs = 0;
 		    m_tsUpdated = MicrosecondsSinceEpoch ();
-		    
 		}
 
-		if (state > 0)
+		double x = distribution (generator);
+		if ((state == 0) && (x<0.25))
 		{
-		    this->bandwidth += ((double)this->mtu / ((double)symin0 / 1000000.0));
+		    state = 1;
 		}
 
-	    }
+		printf ("%d\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
+
+		if (state)
+		{
+		    if (state < 0)
+		    {
+			this->bandwidth = (double)this->bandwidth * 0.75;
+			cs = 0;
+			m_tsUpdated = MicrosecondsSinceEpoch ();
+		    
+		    }
+
+		    if (state > 0)
+		    {
+			this->bandwidth += ((double)this->mtu / ((double)symin0 / 1000000.0));
+		    }
+
+		}
 	    }
 	    
 	}
