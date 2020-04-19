@@ -19,6 +19,12 @@ target_link_libraries (send_data Threads::Threads)
 add_executable(recv_data ${SOURCE_COMMON} src/recv_data.cpp)
 target_link_libraries (recv_data Threads::Threads)
 
+add_executable(test_client ${SOURCE_COMMON} src/test_client.cpp)
+target_link_libraries (test_client Threads::Threads)
+
+add_executable(test_server ${SOURCE_COMMON} src/test_server.cpp)
+target_link_libraries (test_server Threads::Threads)
+
 # add_executable(ptt_tester ${SOURCE_COMMON} src/ptt_tester.cpp)
 # target_link_libraries (ptt_tester Threads::Threads Python2::Python)
 

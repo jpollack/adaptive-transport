@@ -179,10 +179,10 @@ void UDPStream::receiverEntry (void)
 	    continue;  // timeout
 	}
 
-	if (m_peer.size () == 0)
-	{
+	// if (m_peer.size () == 0)
+	// {
 	    m_peer = raddr;
-	}
+	// }
 
 	const char *base = buf.c_str ();
 	// TODO: replace this with a cast to a struct packetheader
