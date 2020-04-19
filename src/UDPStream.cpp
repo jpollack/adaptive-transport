@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <queue>
 #include <random>
-
+#include "TokenBucket.hpp"
 // #include "TSReturn.hpp"
 
 UDPStream::UDPStream ()
@@ -22,8 +22,6 @@ UDPStream::UDPStream ()
       m_bytesQueued (0),
       m_tsUpdated (0)
 {
-    m_tsLast = 0;
-    m_bytesLast = 0;
     m_socket.set_timestamps ();
     m_socket.set_reuseaddr ();
     m_socket.set_timeout (100000);
@@ -67,11 +65,6 @@ void UDPStream::setRemote (const Address& addr)
     m_peer = addr;
 }
 
-uint64_t UDPStream::getDelay (uint32_t size)
-{
-    return (uint64_t)((1000000 * (m_bytesLast + size)) / bandwidth);
-}
-
 void UDPStream::enqueueSend (const std::string& payload, bool reliable)
 {
     m_bytesQueued += payload.size ();
@@ -80,6 +73,7 @@ void UDPStream::enqueueSend (const std::string& payload, bool reliable)
 
 void UDPStream::senderEntry (void)
 {
+    TokenBucket tb;
     
     while (!m_done)
     {
@@ -89,20 +83,22 @@ void UDPStream::senderEntry (void)
 	    // fprintf (stderr, "sendQueue.deque timeout, retrying\n");
 	    continue;
 	}
-	uint64_t tsNext = m_tsLast;
 	if (pl.bwlimited)
 	{
-	    tsNext += this->getDelay (pl.payload.size ());
+	    while (!tb.consume (pl.payload.size (), bandwidth, 128*1024))
+	    {
+		// not sendable right now
+		std::this_thread::yield ();
+	    }
+	    // sendable
 	}
-	m_tsLast = wait_until (tsNext);
-	uint32_t seq = m_ptt.setSent (m_tsLast);
+	uint64_t tsSent = MicrosecondsSinceEpoch ();
+	uint32_t seq = m_ptt.setSent (tsSent);
 	m_socket.sendto (m_peer, std::string ((const char*)&seq, 4) + pl.payload);
-
-	m_bytesLast = pl.payload.size ();
 
 	if (pl.reliable)
 	{
-	    m_rtxq.sentPacket (seq, m_tsLast, pl.payload);
+	    m_rtxq.sentPacket (seq, tsSent, pl.payload);
 	}
 
 	m_bytesQueued -= pl.payload.size ();

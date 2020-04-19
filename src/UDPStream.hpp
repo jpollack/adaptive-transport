@@ -68,12 +68,9 @@ private:
     void retransmitEntry (void);
     void limiterEntry (void);
     std::tuple<int,int,int,int> limiterStats (void);
-    uint64_t getDelay (uint32_t size);
     void enqueueSend (const std::string& payload, bool reliable);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);
     uint64_t onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv);
-    uint64_t m_tsLast;
-    uint32_t m_bytesLast;
     
     std::unordered_map<uint32_t,std::string> m_recvMap;
     UDPSocket m_socket;
