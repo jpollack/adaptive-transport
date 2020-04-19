@@ -33,6 +33,7 @@ UDPStream::~UDPStream ()
 {
     while (m_bytesQueued || m_rtxq.size ())
     {
+	
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
     }
 
@@ -40,6 +41,7 @@ UDPStream::~UDPStream ()
     m_receiver.join ();
     m_retransmit.join ();
     m_sender.join ();
+    m_limiter.join ();
 }
 
 const uint8_t *UDPStream::rptr ()
