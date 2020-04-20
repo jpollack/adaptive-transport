@@ -21,6 +21,17 @@ std::pair<uint64_t, std::string> RTXQueue::dropPacket (uint32_t seq)
     std::lock_guard<std::mutex> guard (m_mutex);
     auto el = m_map[seq];
     m_map.erase (seq);
+    // fprintf (stderr, "dropped %d, %d\n", seq, el.second.size ());
+    
+    return el;
+}
+std::pair<uint64_t, std::string> RTXQueue::ackPacket (uint32_t seq)
+{
+    std::lock_guard<std::mutex> guard (m_mutex);
+    auto el = m_map[seq];
+    m_map.erase (seq);
+    // fprintf (stderr, "acked %d, %d\n", seq, el.second.size ());
+    
     return el;
 }
 

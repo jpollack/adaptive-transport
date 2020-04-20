@@ -65,7 +65,7 @@ private:
     uint64_t m_tsUpdated;
     void senderEntry (void);
     void receiverEntry (void);
-    void retransmitEntry (void);
+    void retransmit (void);
     void limiterEntry (void);
     std::tuple<int,int,int,int> limiterStats (void);
     void enqueueSend (const std::string& payload, bool reliable);

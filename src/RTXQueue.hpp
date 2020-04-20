@@ -17,6 +17,7 @@ public:
     // adds the packet and timestamp to the queue TODO: make return sequence number
     void sentPacket (uint32_t seq, uint64_t tsSent, const std::string& payload);
     std::pair<uint64_t, std::string> dropPacket (uint32_t seq);
+    std::pair<uint64_t, std::string> ackPacket (uint32_t seq);
     std::vector<uint32_t> olderThan (uint64_t ts);
     std::vector<uint32_t> unacked (uint64_t ts);
     size_t size () const;
