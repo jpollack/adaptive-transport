@@ -11,7 +11,7 @@ find_package (Threads)
 # include_directories(${Python2_INCLUDE_DIRS} ${Python2_NumPy_INCLUDE_DIRS})
 
 # remove src/Plot.cpp
-set(SOURCE_COMMON src/Address.cpp src/FileDescriptor.cpp src/Poller.cpp src/Socket.cpp src/TSReturn.cpp src/PTT.cpp src/fullio.cpp src/UDPStream.cpp src/Timing.cpp src/CircBuff.cpp src/RTXQueue.cpp src/TokenBucket.cpp)
+set(SOURCE_COMMON src/Address.cpp src/FileDescriptor.cpp src/Poller.cpp src/Socket.cpp src/TSReturn.cpp src/PTT.cpp src/fullio.cpp src/UDPStream.cpp src/Timing.cpp src/CircBuff.cpp src/RTXQueue.cpp src/TokenBucket.cpp src/RollingWindow.cpp src/RollingFilter.cpp)
 
 add_executable(send_data ${SOURCE_COMMON} src/send_data.cpp)
 target_link_libraries (send_data Threads::Threads)
@@ -24,6 +24,9 @@ target_link_libraries (test_client Threads::Threads)
 
 add_executable(test_server ${SOURCE_COMMON} src/test_server.cpp)
 target_link_libraries (test_server Threads::Threads)
+
+add_executable(tester ${SOURCE_COMMON} src/tester.cpp)
+target_link_libraries (tester Threads::Threads)
 
 # add_executable(ptt_tester ${SOURCE_COMMON} src/ptt_tester.cpp)
 # target_link_libraries (ptt_tester Threads::Threads Python2::Python)
