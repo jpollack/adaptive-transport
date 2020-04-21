@@ -403,7 +403,7 @@ void UDPStream::limiterEntry (void)
 		    state = 1;
 		}
 
-		printf ("%d\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
+		printf ("%lu\t(%d,%d)\t%d\t%d\t%f\t%d\t%f\n", this->bandwidth,nrecv, ndropped, symin0, cs, sc, state, x);
 
 		if (state && updateBandwidth)
 		{
@@ -417,7 +417,8 @@ void UDPStream::limiterEntry (void)
 
 		    if (state > 0)
 		    {
-			this->bandwidth += ((double)this->mtu / ((double)symin0 / 1000000.0));
+			double nBandwidth = (double) this->bandwidth + ((double)this->mtu / ((double)symin0 / 1000000.0));
+			this->bandwidth = ((nBandwidth < (1 << 31)) ? (uint32_t)nBandwidth : (1 << 31));
 		    }
 
 		}
