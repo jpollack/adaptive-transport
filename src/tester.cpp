@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "RollingWindow.hpp"
-#include "RollingFilter.hpp"
+#include "RollingStats.hpp"
 
 int main (int argc, char **argv)
 {
@@ -19,18 +19,22 @@ int main (int argc, char **argv)
     printf ("%lf\n", wnd[1]);
     printf ("%lf\n", wnd[2]);
 
-    RollingFilter ma ([](RollingWindow& wnd, std::vector<double>& reg)
-			  {
-			      reg[0] += wnd[0];
-			      reg[0] -= wnd[-1];
-			      return reg[0] / (double) wnd.size ();
-			  });
+    // RollingFilter ma ([](RollingWindow& wnd, std::vector<double>& reg)
+    // 			  {
+    // 			      reg[0] += wnd[0];
+    // 			      reg[0] -= wnd[-1];
+    // 			      return reg[0] / (double) wnd.size ();
+    // 			  });
 
-    ma.size (8);
+    // ma.size (8);
+
+    RollingStats st;
+    st.size (4);
     
-    for (int ii = 0; ii < 16; ii++)
+    for (int ii = 1; ii < 16; ii++)
     {
-	printf ("%d\t%lf\n", ii, ma (ii));
+	st (ii);
+	printf ("%d\t%lf\t%lf\t%lf\n", ii, st.wmin (), st.mean (), st.wmax ());
     }
 
     return 0;
