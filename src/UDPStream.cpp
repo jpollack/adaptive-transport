@@ -9,7 +9,6 @@
 UDPStream::UDPStream ()
     : bandwidth (1024*1024),
       mtu (1400),
-      rtt (1000000), // initilize to 1 second.
       updateBandwidth (true),
       m_done (false),
       m_nextSeq (1),
@@ -21,6 +20,7 @@ UDPStream::UDPStream ()
       m_bytesQueued (0),
       m_tsUpdated (0)
 {
+    rtt.size (16);
     m_socket.set_timestamps ();
     m_socket.set_reuseaddr ();
     m_socket.set_timeout (10000); // 10ms
@@ -158,8 +158,14 @@ uint64_t UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv)
 	// abort ();
     }
     auto [tsSent, payload] = m_rtxq.ackPacket (seq);
-    uint64_t rtt = ackRecv - tsSent;
-    return rtt;
+    if (tsSent)
+    {
+	return ackRecv - tsSent;
+    }
+    else
+    {
+	return 0;
+    }
 }
 
 
@@ -181,7 +187,7 @@ void UDPStream::receiverEntry (void)
 	}
 	// if (m_peer.size () == 0)
 	// {
-	    m_peer = raddr;
+	m_peer = raddr;
 	// }
 
 	const char *base = buf.c_str ();
@@ -207,7 +213,12 @@ void UDPStream::receiverEntry (void)
 	    // uint32_t dseq = *((uint32_t *)(5 + base));
 	    // TODO: this is so ugly, noone else thinks in bytes, fix this.
 	    uint64_t atsRecv = *(uint64_t *)(base + 5);
-	    rtt = this->onRecvAck (seq, atsRecv, ts);
+	    uint64_t nrtt = this->onRecvAck (seq, atsRecv, ts);
+	    if (nrtt)
+	    {
+		rtt (nrtt);
+		// fprintf (stderr, "%lf\t%lf\n", rtt.mean (), rtt.stdev ());
+	    }
 	}
 	else if (type == 'D')
 	{
@@ -236,12 +247,17 @@ void UDPStream::retransmit (void)
 {
     // TODO: replace with rtt + 2 stdev
     uint64_t now = MicrosecondsSinceEpoch ();
-    uint64_t timeout = std::max ((int)(2 * rtt), 10000);
-    
-    for (const auto& seq : m_rtxq.olderThan (now - timeout))
+    uint64_t timeout = std::max (rtt.populated () ? rtt.mean () + (rtt.stdev () * 3) : 1000000.0, 10000.0);
+
+    auto ovec = m_rtxq.olderThan (now - timeout);
+    if (ovec.size ())
     {
-	auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
-	this->enqueueSend (payload, true);
+	// fprintf (stderr, "rtx: to == %lu\n", timeout);
+	for (const auto& seq : ovec)
+	{
+	    auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
+	    this->enqueueSend (payload, true);
+	}
     }
 }
 

@@ -20,9 +20,9 @@ RollingStats::~RollingStats ()
 void RollingStats::operator () (double val)
 {
     m_head = (m_head == (m_size - 1)) ? 0 : (m_head + 1);
-    double oldval = m_buf[m_head];
     if (m_count++ >= m_size)
     {
+	double oldval = m_buf[m_head];
 	m_set.erase (m_set.find (oldval));
 	m_total -= oldval;
     }
@@ -33,7 +33,7 @@ void RollingStats::operator () (double val)
     m_buf[m_head] = val;
 
     // SLOW
-    if (m_count > 1)
+    if (wsize > 1)
     {
 	double m = 0;
 	double s = 0;
@@ -41,7 +41,7 @@ void RollingStats::operator () (double val)
 	{
 	    double x = this->at (k);
 	    double oldm = m;
-	    m += (x - m) / (double)k;
+	    m += (x - m) / (double)(k + 1);
 	    s += (x - m) * (x - oldm);
 	}
 	m_variance = s / (double)(wsize - 1);
@@ -82,6 +82,7 @@ void RollingStats::size (int size)
 }
 
 int RollingStats::count (void) const { return m_count; }
+bool RollingStats::populated (void) const { return m_count >= m_size; }
 double RollingStats::mean () const { return m_mean; }
 double RollingStats::stdev () const { return sqrt (m_variance); }
 double RollingStats::variance () const { return m_variance; }

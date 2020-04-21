@@ -14,7 +14,7 @@ public:
     int size (void) const;
     void size (int);
     int count (void) const;
-
+    bool populated (void) const;
     double mean () const;
     double stdev () const;
     double variance () const;

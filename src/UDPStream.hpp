@@ -12,7 +12,7 @@
 #include <atomic>
 #include <functional>
 #include "RTXQueue.hpp"
-
+#include "RollingStats.hpp"
 /* This should implement packetiszing of the data, retransmits, and timing */
 
 class UDPStream
@@ -38,7 +38,7 @@ public:
 
     uint32_t bandwidth;
     uint32_t mtu;
-    std::atomic<uint64_t> rtt;
+    RollingStats rtt;
     bool updateBandwidth;
 
 private:

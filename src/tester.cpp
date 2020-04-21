@@ -34,7 +34,7 @@ int main (int argc, char **argv)
     for (int ii = 1; ii < 16; ii++)
     {
 	st (ii);
-	printf ("%d\t%lf\t%lf\t%lf\n", ii, st.wmin (), st.mean (), st.wmax ());
+	printf ("%d\t%lf\t%lf\t%lf\t%lf\n", ii, st.wmin (), st.mean (), st.variance (), st.wmax ());
     }
 
     return 0;
