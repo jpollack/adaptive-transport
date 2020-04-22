@@ -155,7 +155,6 @@ void UDPStream::receiverEntry (void)
 		       && m_packetQueue.unacked ()->tsRecv ()
 		       && m_packetQueue.unacked ()->tsAck ())
 		{
-		    // fprintf (stderr, "ack adv\n");
 		    m_packetQueue.unackedNext ();
 		}
 	    }
@@ -179,7 +178,7 @@ int UDPStream::retransmit (void) // returns number dropped
 {
     // TODO: replace with rtt + 2 stdev
     uint64_t now = MicrosecondsSinceEpoch ();
-    uint64_t timeout = std::max (rtt.populated () ? rtt.mean () + (rtt.stdev () * 3) : 1000000.0, 10000.0);
+    uint64_t timeout = std::max (rtt.populated () ? rtt.mean () * 2 : 1000000.0, 10000.0);
 
     int ndropped = 0;
     while (m_packetQueue.retransmitOlderThan (now - timeout))

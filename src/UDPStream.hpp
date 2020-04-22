@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UDPEndpoint.hpp"
 #include "Address.hpp"
 #include "PTT.hpp"
 #include "readerwriterqueue.h"
@@ -52,7 +51,6 @@ private:
     uint32_t m_dseq;
     std::thread m_sender;
     std::thread m_receiver;
-    std::thread m_retransmit;
     std::thread m_limiter;
     uint64_t m_tsUpdated;
     void senderEntry (void);
