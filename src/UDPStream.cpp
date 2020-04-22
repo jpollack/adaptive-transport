@@ -217,7 +217,7 @@ void UDPStream::receiverEntry (void)
 	    if (nrtt)
 	    {
 		rtt (nrtt);
-		// fprintf (stderr, "%lf\t%lf\n", rtt.mean (), rtt.stdev ());
+		// fprintf (stderr, "RTT: %lu\t%lf\t%lf\n", nrtt, rtt.mean (), rtt.stdev ());
 	    }
 	}
 	else if (type == 'D')
@@ -378,7 +378,6 @@ void UDPStream::limiterEntry (void)
 	    symin0 = y0 / wnd;
 	    if (symin1)
 	    {
-
 		gymin = symin0 - symin1;
 		cs = cs + gymin;
 		sc = (double)cs /(double)symin1;
@@ -417,8 +416,16 @@ void UDPStream::limiterEntry (void)
 
 		    if (state > 0)
 		    {
-			double nBandwidth = (double) this->bandwidth + ((double)this->mtu / ((double)symin0 / 1000000.0));
-			this->bandwidth = ((nBandwidth < (1 << 31)) ? (uint32_t)nBandwidth : (1 << 31));
+			
+			double newBandwidth = (double) this->bandwidth + ((double)this->mtu / ((double)abs (symin0) / 1000000.0));
+			if (newBandwidth < static_cast<double>(std::numeric_limits<uint32_t>::max ()))
+			{
+			    this->bandwidth = (uint32_t)newBandwidth;
+			}
+			else
+			{
+			    this->bandwidth = std::numeric_limits<uint32_t>::max ();
+			}
 		    }
 
 		}

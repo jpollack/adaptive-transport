@@ -51,6 +51,7 @@ int main (int argc, char **argv)
 				       {
 					   fprintf (fh, "%d\t%lu\t%lu\n", seq, tsSent, tsRecv);
 				       }; 
+	uint64_t tsStart = MicrosecondsSinceEpoch ();
 	printf ("Starting testSize = %d, bandwidth = %d, updateBandwidth = %d\n", testSize, bandwidth, updateBandwidth);
 	while (testSize)
 	{
@@ -58,6 +59,7 @@ int main (int argc, char **argv)
 	    populateRandom (tbuf, nBytes);
 	    while(ustream.bytesQueued ())
 	    {
+		// std::this_thread::sleep_for (std::chrono::milliseconds (1));
 		std::this_thread::yield ();
 	    }
 	    ustream.send (std::string (tbuf, tbuf+nBytes));
@@ -70,7 +72,8 @@ int main (int argc, char **argv)
 	}
 
 	fclose (fh);
-	printf ("Test finished.\n");
+	uint64_t tsStop = MicrosecondsSinceEpoch ();
+	printf ("Test finished. %lf seconds.\n", (double)(tsStop - tsStart) / 1000000.0);
     }
     
 }
