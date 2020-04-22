@@ -66,16 +66,6 @@ void Socket::bind( const Address & address )
 {
     sockaddr addr = address.to_sockaddr ();
     socklen_t asize = address.size ();
-
-    // void *p = &addr;
-    // printf ("addr == ");
-    // for (auto ii = 0; ii < asize; ++ii)
-    // {
-    // 	uint8_t c = *(const uint8_t *)(p + ii);
-    // 	printf ("%02x ", c);
-    // }
-    // printf ("\nsize == %d\n", asize);
-    
     SystemCall( "bind", ::bind( fd_num(), &addr, asize));
 }
 
@@ -85,6 +75,50 @@ void Socket::connect( const Address & address )
   SystemCall( "connect", ::connect( fd_num(),
 				    &address.to_sockaddr(),
 				    address.size() ) );
+}
+
+static uint64_t packetTimestamp (msghdr *hdr)
+{
+    cmsghdr *tshdr = CMSG_FIRSTHDR (hdr);
+
+#if defined (SO_TIMESTAMPNS)
+    int desired = SCM_TIMESTAMPNS;
+#elif defined (SO_TIMESTAMP)
+    int desired = SCM_TIMESTAMP;
+#else
+# error "Cannot get packet timestamps."
+#endif
+
+    uint64_t timestamp = 0;
+    while (tshdr)
+    {
+	if (tshdr->cmsg_type != desired)
+	{
+	    fprintf (stderr, "Unexpected message type 0x%x.\n", (uint32_t)tshdr->cmsg_type);
+	    abort ();
+	}
+	else
+	{
+#if defined (SO_TIMESTAMPNS)
+	    const timespec *tsp = reinterpret_cast<timespec *>(CMSG_DATA (tshdr));
+	    timestamp = ((tsp->tv_sec * 1000000000) + tsp->tv_nsec) / 1000;
+#elif defined (SO_TIMESTAMP)
+	    const timeval *tvp = reinterpret_cast<timeval *>(CMSG_DATA (tshdr));
+	    timestamp = (tvp->tv_sec * 1000000) + tvp->tv_usec;
+#else
+#error "Cannot get packet timestamps."
+#endif
+	}
+	tshdr = CMSG_NXTHDR (hdr, tshdr);
+    }
+
+    if (!timestamp)
+    {
+	fprintf (stderr, "Did not find packet timestamp.\n");
+	abort ();
+    }
+
+    return timestamp;
 }
 
 /* receive datagram and where it came from */
@@ -128,25 +162,13 @@ std::tuple<uint64_t,Address,std::string> UDPSocket::recv (void)
   /* make sure we got the whole datagram */
   if ( header.msg_flags & MSG_TRUNC ) {
       fprintf (stderr, "recvfrom (oversized datagram)\n");
-      exit (1);
+      abort ();
   } else if ( header.msg_flags ) {
       fprintf (stderr, "recvfrom (unhandled flag)\n");
-      exit (1);
+      abort ();
   }
 
-  uint64_t timestamp = -1;
-
-  /* find the timestamp header (if there is one) */
-  cmsghdr *ts_hdr = CMSG_FIRSTHDR( &header );
-  while ( ts_hdr ) {
-    if ( ts_hdr->cmsg_level == SOL_SOCKET
-	 and ts_hdr->cmsg_type == SO_TIMESTAMPNS ) {
-      const timespec * const kernel_time = reinterpret_cast<timespec *>( CMSG_DATA( ts_hdr ) );
-      timestamp = ((kernel_time->tv_sec * 1000000000) + kernel_time->tv_nsec) / 1000;
-    }
-    ts_hdr = CMSG_NXTHDR( &header, ts_hdr );
-  }
-
+  uint64_t timestamp = packetTimestamp (&header);
   return std::make_tuple (timestamp,
 			  Address (datagram_source_address, header.msg_namelen),
 			  std::string (msg_payload, recv_len));
@@ -156,16 +178,6 @@ std::tuple<uint64_t,Address,std::string> UDPSocket::recv (void)
 /* send datagram to specified address */
 void UDPSocket::sendto( const Address & destination, const string & payload )
 {
-    // const void *p = &destination.to_sockaddr ();
-    // int dsize = destination.size ();
-    // printf ("sending to addr[%d]: ", dsize);
-    // for (auto ii = 0; ii < dsize; ++ii)
-    // {
-    // 	uint8_t c = *(const uint8_t *)(p + ii);
-    // 	printf ("%02x ", c);
-    // }
-
-    // printf ("(%s)\n", destination.to_string ().c_str ());
     const ssize_t bytes_sent =
     SystemCall( "sendto", ::sendto( fd_num(),
 				    payload.data(),
@@ -214,7 +226,7 @@ TCPSocket TCPSocket::accept()
 
 /* set socket option */
 template <typename option_type>
-void Socket::setsockopt( const int level, const int option, const option_type & option_value )
+void Socket::setsockopt (const int level, const int option, const option_type & option_value)
 {
   SystemCall( "setsockopt", ::setsockopt( fd_num(), level, option,
 					  &option_value, sizeof( option_value ) ) );
@@ -237,6 +249,12 @@ void Socket::set_timeout (uint64_t usecs)
 /* turn on timestamps on receipt */
 void UDPSocket::set_timestamps()
 {
-  setsockopt( SOL_SOCKET, SO_TIMESTAMPNS, int( true ) );
+#if defined (SO_TIMESTAMPNS)
+    setsockopt( SOL_SOCKET, SO_TIMESTAMPNS, int( true ) );
+#elif defined (SO_TIMESTAMP)
+    setsockopt( SOL_SOCKET, SO_TIMESTAMP, int( true ) );
+#else
+    # error "Cannot get packet timestamps."
+#endif
 }
 
