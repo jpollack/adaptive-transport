@@ -418,13 +418,13 @@ void UDPStream::limiterEntry (void)
 		    {
 			
 			double newBandwidth = (double) this->bandwidth + ((double)this->mtu / ((double)abs (symin0) / 1000000.0));
-			if (newBandwidth < static_cast<double>(std::numeric_limits<uint32_t>::max ()))
+			if (newBandwidth < static_cast<double>(std::numeric_limits<uint32_t>::max () / 2))
 			{
 			    this->bandwidth = (uint32_t)newBandwidth;
 			}
 			else
 			{
-			    this->bandwidth = std::numeric_limits<uint32_t>::max ();
+			    this->bandwidth = (std::numeric_limits<uint32_t>::max () / 2);
 			}
 		    }
 
