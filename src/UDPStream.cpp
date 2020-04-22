@@ -17,7 +17,6 @@ UDPStream::UDPStream ()
       m_sender (&UDPStream::senderEntry, this),
       m_receiver (&UDPStream::receiverEntry, this),
       m_limiter (&UDPStream::limiterEntry, this),
-      m_bytesQueued (0),
       m_tsUpdated (0)
 {
     rtt.size (16);
@@ -28,9 +27,8 @@ UDPStream::UDPStream ()
 
 UDPStream::~UDPStream ()
 {
-    while (m_bytesQueued || m_rtxq.size ())
+    while (this->bytesQueued ())
     {
-	
 	std::this_thread::sleep_for (std::chrono::milliseconds (10));
     }
 
@@ -40,65 +38,30 @@ UDPStream::~UDPStream ()
     m_limiter.join ();
 }
 
-const uint8_t *UDPStream::rptr ()
-{
-    return m_recvBuff.rptr ();
-}
-
-void UDPStream::rptrAdvance (size_t num)
-{
-    m_recvBuff.rptrAdvance (num);
-}
-uint32_t UDPStream::readable (void)
-{
-    return m_recvBuff.used ();
-}
-void UDPStream::setLocal (const Address& addr)
-{
-    m_socket.bind (addr);
-}
-
-void UDPStream::setRemote (const Address& addr)
-{
-    m_peer = addr;
-}
-
-void UDPStream::enqueueSend (const std::string& payload, bool reliable)
-{
-    m_bytesQueued += payload.size ();
-    m_sendQueue.enqueue ({.reliable = reliable, .bwlimited = true, .payload = payload});
-    // fprintf (stderr, "%lu:\tequeued %d bytes.\n", MicrosecondsSinceEpoch (), payload.size ());
-}
+const uint8_t *UDPStream::rptr () { return m_recvBuff.rptr (); }
+void UDPStream::rptrAdvance (size_t num) { m_recvBuff.rptrAdvance (num); }
+uint32_t UDPStream::readable (void) { return m_recvBuff.used (); }
+void UDPStream::setLocal (const Address& addr) { m_socket.bind (addr); }
+void UDPStream::setRemote (const Address& addr) { m_peer = addr; }
 
 void UDPStream::senderEntry (void)
 {
     TokenBucket tb;
-    
     while (!m_done)
     {
-	Payload pl;
-	if (!m_sendQueue.wait_dequeue_timed (pl, std::chrono::milliseconds (100)))
+	Packet *pkt = m_packetQueue.tx (10000);
+	if (pkt == nullptr)
 	{
 	    continue; // timeout
 	}
-
-	if (pl.bwlimited)
+	while (!tb.consume (pkt->size (), bandwidth, 128*1024))
 	{
-	    while (!tb.consume (pl.payload.size (), bandwidth, 128*1024))
-	    {
-		std::this_thread::yield ();		// not sendable right now
-	    }
-	    // sendable
+	    // std::this_thread::yield ();
+	    std::this_thread::sleep_for (std::chrono::microseconds (100));
 	}
-	uint64_t tsSent = MicrosecondsSinceEpoch ();
-	uint32_t seq = m_ptt.setSent (tsSent);
-	m_socket.sendto (m_peer, std::string ((const char*)&seq, 4) + pl.payload);
-	if (pl.reliable)
-	{
-	    m_rtxq.sentPacket (seq, tsSent, pl.payload);
-	}
-
-	m_bytesQueued -= pl.payload.size ();
+	pkt->tsSent (MicrosecondsSinceEpoch ());
+	m_socket.sendto (m_peer, pkt->buf (), pkt->size ());
+	m_packetQueue.txNext ();
     }
 }
 
@@ -106,20 +69,25 @@ void UDPStream::send (const std::string& msg)
 {
     uint32_t bytesRemaining = msg.size ();
     uint32_t idx = 0;
+    Packet *pkt = nullptr;
     while (bytesRemaining)
     {
-	uint32_t cBytes = std::min (bytesRemaining, mtu);
-	std::string payload = "D" + std::string ((const char *)&m_dseq, 4) + msg.substr (idx, cBytes);
-	this->enqueueSend (payload, true);
-	m_dseq++;
-	bytesRemaining -= cBytes;
-	idx += cBytes;
+	while ((pkt = m_packetQueue.front ()) == nullptr)
+	{
+	    std::this_thread::yield ();
+	}
+	pkt->seq (m_dseq++);
+	pkt->isAck (false);
+	pkt->size (4 + std::min (bytesRemaining, Packet::MTU));
+	msg.copy (pkt->dataPayload (), pkt->size () - 4, msg.size () - bytesRemaining);
+	bytesRemaining -= (pkt->size () - 4);
+	m_packetQueue.frontNext ();
     }
 }
 
 uint32_t UDPStream::bytesQueued (void) const
 {
-    return m_bytesQueued;
+    return m_packetQueue.bytesQueued ();
 }
 
 void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
@@ -150,115 +118,75 @@ void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
     }
 }
 
-uint64_t UDPStream::onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv)
-{
-    if (!m_ptt.setRecv (seq, tsRecv))
-    {
-	fprintf (stderr, "Couldn't find matching packet.  got ack for %u, %lu\n", seq, tsRecv);
-	// abort ();
-    }
-    auto [tsSent, payload] = m_rtxq.ackPacket (seq);
-    if (tsSent)
-    {
-	return ackRecv - tsSent;
-    }
-    else
-    {
-	return 0;
-    }
-}
-
 
 void UDPStream::receiverEntry (void)
 {
+    Packet pkt;
+    memset (&pkt, 0, sizeof(Packet));
     while (!m_done)
     {
-	const auto [ts, raddr, buf] = m_socket.recv ();
-	if (!buf.size ())
+	pkt.size (0);
+	const auto raddr = m_socket.recv (pkt);
+	if (!pkt.size ())
 	{
 	    this->retransmit ();
 	    continue;  // timeout
 	}
 
-	if (buf.size () < 9)
+	if (pkt.size () < 4)
 	{
-	    fprintf (stderr, "Unexpected packet of length %d\n", buf.size ());
+	    fprintf (stderr, "Unexpected packet of length %d\n", pkt.size ());
 	    abort ();
 	}
-	// if (m_peer.size () == 0)
-	// {
+
 	m_peer = raddr;
-	// }
 
-	const char *base = buf.c_str ();
-	// TODO: replace this with a cast to a struct packetheader
-
-	// get flags
-
-	// if (flags & RequiresAck)
-	// {
-	//     // construct ack packet.
-	//     std::string ackPacket = "A" + std::string (base + 1, 4) + std::string ((const char *)&ts, 8);
-	//     m_socket.sendto (raddr)
-	// }
-	
-	uint32_t seq = *((uint32_t *) base);
-	// bool isAck = (seq >> 31);
-	// seq &= ~(1 << 31);
-	
-	char type = *(4 + base);
-
-	if (type == 'A') // 0x41
+	if (pkt.isAck ())
 	{
-	    // uint32_t dseq = *((uint32_t *)(5 + base));
-	    // TODO: this is so ugly, noone else thinks in bytes, fix this.
-	    uint64_t atsRecv = *(uint64_t *)(base + 5);
-	    uint64_t nrtt = this->onRecvAck (seq, atsRecv, ts);
-	    if (nrtt)
+	    Packet *opkt = m_packetQueue.find (pkt.seq ());
+	    if (opkt)
 	    {
-		rtt (nrtt);
-		// fprintf (stderr, "RTT: %lu\t%lf\t%lf\n", nrtt, rtt.mean (), rtt.stdev ());
+		opkt->tsRecv (pkt.tsRecvAck ());
+		opkt->tsAck (pkt.tsRecv ());
+		// FIXME: Do something with opkt.tsSent, opkt.tsRecv, opkt.tsAck
+		rtt (opkt->tsAck () - opkt->tsSent ());
+		// fprintf (stderr, "RTT: %lf\t%lf\n", rtt.mean (), rtt.stdev ());
+		while (m_packetQueue.unacked ()
+		       && m_packetQueue.unacked ()->tsRecv ()
+		       && m_packetQueue.unacked ()->tsAck ())
+		{
+		    // fprintf (stderr, "ack adv\n");
+		    m_packetQueue.unackedNext ();
+		}
 	    }
-	}
-	else if (type == 'D')
-	{
-	    uint32_t dseq = *((uint32_t *)(5 + base));
-	    const char *dbase = 9 + base;
-	    uint32_t dsize = buf.size () - 9;
-	    this->onRecvData (dseq, dbase, dsize);
-	    // send Ack for the data
-
-	    m_socket.sendto (m_peer,
-			     std::string ((const char *)&seq, 4)
-			     + "A"
-			     + std::string ((const char*)&ts, 8));
-
 	}
 	else
 	{
-	    fprintf (stderr, "unexpected packet type '%c'(%d)\n", type, type);
-	    abort ();
+	    // Data packet
+	    this->onRecvData (pkt.seq (), pkt.dataPayload (), pkt.size () - 4);
+	    // Reuse the packet to create the ack.
+	    pkt.isAck (true);
+	    pkt.size (12);
+	    pkt.tsRecvAck (pkt.tsRecv ());
+	    // Send ack immediately
+	    m_socket.sendto (raddr, pkt.buf (), pkt.size ());
 	}
 	this->retransmit ();
     }
 }
 
-void UDPStream::retransmit (void)
+int UDPStream::retransmit (void) // returns number dropped
 {
     // TODO: replace with rtt + 2 stdev
     uint64_t now = MicrosecondsSinceEpoch ();
     uint64_t timeout = std::max (rtt.populated () ? rtt.mean () + (rtt.stdev () * 3) : 1000000.0, 10000.0);
 
-    auto ovec = m_rtxq.olderThan (now - timeout);
-    if (ovec.size ())
+    int ndropped = 0;
+    while (m_packetQueue.retransmitOlderThan (now - timeout))
     {
-	// fprintf (stderr, "rtx: to == %lu\n", timeout);
-	for (const auto& seq : ovec)
-	{
-	    auto [ tsSent, payload ] = m_rtxq.dropPacket (seq);
-	    this->enqueueSend (payload, true);
-	}
+	ndropped++;
     }
+    return ndropped;
 }
 
 std::tuple<int,int,int,int> UDPStream::limiterStats ()

@@ -55,17 +55,19 @@ int main (int argc, char **argv)
 	printf ("Starting testSize = %d, bandwidth = %d, updateBandwidth = %d\n", testSize, bandwidth, updateBandwidth);
 	while (testSize)
 	{
+	    printf ("%d bytes remaining.\t %d bytes queued.\n", testSize, ustream.bytesQueued ());
 	    uint32_t nBytes = (testSize < blocksize) ? testSize : blocksize;
 	    populateRandom (tbuf, nBytes);
 	    while(ustream.bytesQueued ())
 	    {
-		// std::this_thread::sleep_for (std::chrono::milliseconds (1));
 		std::this_thread::yield ();
+		
 	    }
 	    ustream.send (std::string (tbuf, tbuf+nBytes));
 	    testSize -= nBytes;
 	}
 
+	printf ("Done\n");
 	while(ustream.bytesQueued ())
 	{
 	    std::this_thread::yield ();

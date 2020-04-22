@@ -11,8 +11,10 @@
 #include "Address.hpp"
 #include <atomic>
 #include <functional>
-#include "RTXQueue.hpp"
 #include "RollingStats.hpp"
+#include "Packet.hpp"
+#include "PacketQueue.hpp"
+
 /* This should implement packetiszing of the data, retransmits, and timing */
 
 class UDPStream
@@ -42,16 +44,7 @@ public:
     bool updateBandwidth;
 
 private:
-    struct Payload
-    {
-	bool reliable;
-	bool bwlimited;
-	std::string payload;
-    };
-    
-    using PayloadQueue = moodycamel::BlockingConcurrentQueue<Payload>;
-    RTXQueue m_rtxq;
-    PayloadQueue m_sendQueue;
+    PacketQueue m_packetQueue;
     PTT m_ptt;
     bool m_done;
     uint32_t m_nextSeq;
@@ -61,16 +54,13 @@ private:
     std::thread m_receiver;
     std::thread m_retransmit;
     std::thread m_limiter;
-    std::atomic<uint32_t> m_bytesQueued;
     uint64_t m_tsUpdated;
     void senderEntry (void);
     void receiverEntry (void);
-    void retransmit (void);
+    int retransmit (void);
     void limiterEntry (void);
     std::tuple<int,int,int,int> limiterStats (void);
-    void enqueueSend (const std::string& payload, bool reliable);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);
-    uint64_t onRecvAck (uint32_t seq, uint64_t tsRecv, uint64_t ackRecv);
     
     std::unordered_map<uint32_t,std::string> m_recvMap;
     UDPSocket m_socket;

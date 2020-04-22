@@ -3,6 +3,7 @@
 
 #include "Address.hpp"
 #include "FileDescriptor.hpp"
+#include "Packet.hpp"
 
 /* class for network sockets (UDP, TCP, etc.) */
 class Socket : public FileDescriptor
@@ -54,8 +55,13 @@ public:
   /* receive datagram, timestamp, and where it came from */
     std::tuple<uint64_t,Address,std::string> recv();
 
+  /* receive datagram, timestamp, and where it came from into a preallocated structure */
+    Address recv (Packet &);
+    
   /* send datagram to specified address */
   void sendto( const Address & peer, const std::string & payload );
+
+    void sendto( const Address & peer, const void* buf, size_t size);
 
   /* send datagram to connected address */
   void send( const std::string & payload );

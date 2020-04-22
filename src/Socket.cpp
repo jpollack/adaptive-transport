@@ -121,6 +121,64 @@ static uint64_t packetTimestamp (msghdr *hdr)
     return timestamp;
 }
 
+
+// pkt is allocated by the caller
+Address UDPSocket::recv (Packet &pkt)
+{
+  static const ssize_t RECEIVE_MTU = 65536;
+
+  /* receive source address, timestamp and payload */
+  sockaddr datagram_source_address;
+  msghdr header; zero( header );
+  iovec msg_iovec; zero( msg_iovec );
+
+  char msg_control[ RECEIVE_MTU ];
+
+  /* prepare to get the payload */
+  msg_iovec.iov_base = pkt.buf ();
+  msg_iovec.iov_len = Packet::MTU + 8;
+
+  /* prepare to get the source address */
+  header.msg_name = &datagram_source_address;
+  header.msg_namelen = sizeof( datagram_source_address );
+
+  header.msg_iov = &msg_iovec;
+  header.msg_iovlen = 1;
+
+  /* prepare to get the timestamp */
+  header.msg_control = msg_control;
+  header.msg_controllen = sizeof( msg_control );
+
+  /* call recvmsg */
+  ssize_t recv_len = recvmsg (fd_num(), &header, 0);
+
+//  if ((recv_len == -1) && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))
+  if (recv_len == -1)
+  {
+      //timeout
+      return Address ();
+  }
+  register_read();
+
+  /* make sure we got the whole datagram */
+  if ( header.msg_flags & MSG_TRUNC )
+  {
+      fprintf (stderr, "recvfrom (oversized datagram)\n");
+      abort ();
+  } else if ( header.msg_flags )
+  {
+      fprintf (stderr, "recvfrom (unhandled flag)\n");
+      abort ();
+  }
+
+  pkt.size (recv_len);
+  pkt.tsRecv (packetTimestamp (&header));
+  
+  return Address (datagram_source_address, header.msg_namelen);
+      
+}
+
+
 /* receive datagram and where it came from */
 std::tuple<uint64_t,Address,std::string> UDPSocket::recv (void)
 {
@@ -189,6 +247,25 @@ void UDPSocket::sendto( const Address & destination, const string & payload )
   register_write();
 
   if ( size_t( bytes_sent ) != payload.size() ) {
+      fprintf (stderr, "datagram payload too big for sendto()\n" );
+      exit (1);
+  }
+}
+
+/* send datagram to specified address */
+void UDPSocket::sendto( const Address & destination, const void *buf, size_t size)
+{
+    const ssize_t bytes_sent =
+    SystemCall( "sendto", ::sendto( fd_num(),
+				    buf,
+				    size,
+				    0,
+				    &destination.to_sockaddr(),
+				    destination.size() ) );
+
+  register_write();
+
+  if ( size_t( bytes_sent ) != size ) {
       fprintf (stderr, "datagram payload too big for sendto()\n" );
       exit (1);
   }
