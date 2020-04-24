@@ -20,9 +20,6 @@ UDPStream::UDPStream ()
       m_tsUpdated (0)
 {
     rtt.size (16);
-    // m_socket.set_timestamps ();
-    // m_socket.set_reuseaddr ();
-    // m_socket.set_timeout (10000); // 10ms
 }
 
 UDPStream::~UDPStream ()

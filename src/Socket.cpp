@@ -10,33 +10,22 @@ using namespace std;
 UDPSocket::UDPSocket( void )
     : FileDescriptor( SystemCall( "socket", socket( AF_INET, SOCK_DGRAM, 0 ) ) )
 {
-    set_reuseaddr ();
-    set_timestamps ();
-    set_timeout (UDPSocket::Timeout);
-}
+/* allow local address to be reused sooner, at the cost of some robustness */
+    setsockopt ( SOL_SOCKET, SO_REUSEADDR, int(true));
 
-/* get the local or peer address the socket is connected to */
-Address UDPSocket::get_address( const std::string & name_of_function,
-			     const std::function<int(int, sockaddr *, socklen_t *)> & function ) const
-{
-    sockaddr addr;
-    socklen_t size = sizeof(sockaddr);
+/* turn on timestamps on receipt */
+#if defined (SO_TIMESTAMPNS)
+    setsockopt (SOL_SOCKET, SO_TIMESTAMPNS, int(true));
+#elif defined (SO_TIMESTAMP)
+    setsockopt (SOL_SOCKET, SO_TIMESTAMP, int(true));
+#else
+# error "Cannot get packet timestamps."
+#endif
 
-    SystemCall( name_of_function, function( fd_num(),
-					    &addr,
-					    &size ) );
-
-    return Address (addr, size);
-}
-
-Address UDPSocket::local_address() const
-{
-    return get_address( "getsockname", getsockname );
-}
-
-Address UDPSocket::peer_address() const
-{
-    return get_address( "getpeername", getpeername );
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = UDPSocket::Timeout;
+    setsockopt (SOL_SOCKET, SO_RCVTIMEO, tv);
 }
 
 /* bind socket to a specified local address (usually to listen/accept) */
@@ -106,7 +95,7 @@ Address UDPSocket::recv (Packet &pkt)
 
     /* prepare to get the payload */
     msg_iovec.iov_base = pkt.buf ();
-    msg_iovec.iov_len = Packet::MTU + 8;
+    msg_iovec.iov_len = Packet::MTU + 4;
 
     /* prepare to get the source address */
     header.msg_name = &datagram_source_address;
@@ -174,31 +163,5 @@ void UDPSocket::setsockopt (const int level, const int option, const option_type
 {
     SystemCall( "setsockopt", ::setsockopt( fd_num(), level, option,
 					    &option_value, sizeof( option_value ) ) );
-}
-
-/* allow local address to be reused sooner, at the cost of some robustness */
-void UDPSocket::set_reuseaddr()
-{
-    setsockopt( SOL_SOCKET, SO_REUSEADDR, int( true ) );
-}
-
-void UDPSocket::set_timeout (uint64_t usecs)
-{
-    struct timeval tv;
-    tv.tv_sec = usecs / 1000000;
-    tv.tv_usec = usecs % 1000000;
-    setsockopt (SOL_SOCKET, SO_RCVTIMEO, tv);
-}
-
-/* turn on timestamps on receipt */
-void UDPSocket::set_timestamps()
-{
-#if defined (SO_TIMESTAMPNS)
-    setsockopt( SOL_SOCKET, SO_TIMESTAMPNS, int( true ) );
-#elif defined (SO_TIMESTAMP)
-    setsockopt( SOL_SOCKET, SO_TIMESTAMP, int( true ) );
-#else
-# error "Cannot get packet timestamps."
-#endif
 }
 
