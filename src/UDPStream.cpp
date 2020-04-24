@@ -118,6 +118,17 @@ void UDPStream::onRecvData (uint32_t dseq, const char *base, uint32_t size)
     }
 }
 
+void UDPStream::onMetadata (uint32_t seq, uint64_t tsSent, uint64_t tsRecv, uint64_t tsAck)
+{
+    if (tsAck)
+    {
+	rtt (tsAck - tsSent);
+    }
+    else
+    {
+	// dropped
+    }
+}
 
 void UDPStream::receiverEntry (void)
 {
@@ -127,51 +138,80 @@ void UDPStream::receiverEntry (void)
     {
 	pkt.size (0);
 	const auto raddr = m_socket.recv (pkt);
-	if (!pkt.size ())
-	{
-	    this->retransmit ();
-	    continue;  // timeout
-	}
 
-	if (pkt.size () < 4)
+	if (pkt.size ()) // if we received a packet (and not a timeout)
 	{
-	    fprintf (stderr, "Unexpected packet of length %d\n", pkt.size ());
-	    abort ();
-	}
-
-	m_peer = raddr;
-
-	if (pkt.isAck ())
-	{
-	    Packet *opkt = m_packetQueue.find (pkt.seq ());
-	    if (opkt)
+	    if (pkt.size () < 4)
 	    {
-		opkt->tsRecv (pkt.tsRecvAck ());
-		opkt->tsAck (pkt.tsRecv ());
-		// FIXME: Do something with opkt.tsSent, opkt.tsRecv, opkt.tsAck
-		rtt (opkt->tsAck () - opkt->tsSent ());
-		// fprintf (stderr, "RTT: %lf\t%lf\n", rtt.mean (), rtt.stdev ());
-		while (m_packetQueue.unacked ()
-		       && m_packetQueue.unacked ()->tsRecv ()
-		       && m_packetQueue.unacked ()->tsAck ())
+		fprintf (stderr, "Unexpected packet of length %d\n", pkt.size ());
+		abort ();
+	    }
+
+	    m_peer = raddr;
+
+	    if (pkt.isAck ())
+	    {
+		Packet *opkt = m_packetQueue.find (pkt.seq ());
+		if (opkt)
 		{
-		    m_packetQueue.unackedNext ();
+		    opkt->tsRecv (pkt.tsRecvAck ());
+		    opkt->tsAck (pkt.tsRecv ());
+		    // rtt (opkt->tsAck () - opkt->tsSent ());
+		    // // fprintf (stderr, "RTT: %lf\t%lf\n", rtt.mean (), rtt.stdev ());
+		    // while (m_packetQueue.unacked ()
+		    // 	   && m_packetQueue.unacked ()->tsRecv ()
+		    // 	   && m_packetQueue.unacked ()->tsAck ())
+		    // {
+		    // 	m_packetQueue.unackedNext ();
+		    // }
 		}
 	    }
+	    else
+	    {
+		// Data packet
+		this->onRecvData (pkt.seq (), pkt.dataPayload (), pkt.size () - 4);
+		// Reuse the packet to create the ack.
+		pkt.isAck (true);
+		pkt.size (12);
+		pkt.tsRecvAck (pkt.tsRecv ());
+		// Send ack immediately
+		m_socket.sendto (raddr, pkt.buf (), pkt.size ());
+	    }
+
+	    // this->retransmit ();
 	}
-	else
+	uint64_t now = MicrosecondsSinceEpoch ();
+	uint64_t timeout = std::max (rtt.populated () ? rtt.mean () * 2 : 1000000.0, 10000.0);
+	uint64_t dropTime = now - timeout;
+	// starting at the oldest packet.. 
+	// * if tsRecv and tsAck are set, then it's been acked.
+	// * while it's older than now - timeout or is an acked packet,
+	// advance
+	
+	Packet *upkt = m_packetQueue.unacked ();
+	while (upkt 
+	       && (upkt->tsRecv () // it's been acked 
+		   || (upkt->tsSent () < dropTime))) // it's too old
 	{
-	    // Data packet
-	    this->onRecvData (pkt.seq (), pkt.dataPayload (), pkt.size () - 4);
-	    // Reuse the packet to create the ack.
-	    pkt.isAck (true);
-	    pkt.size (12);
-	    pkt.tsRecvAck (pkt.tsRecv ());
-	    // Send ack immediately
-	    m_socket.sendto (raddr, pkt.buf (), pkt.size ());
+	    if (!upkt->tsRecv ())
+	    {
+		// retransmit
+		Packet *fpkt;
+		while ((fpkt = m_packetQueue.front ()) == nullptr) 	    std::this_thread::yield ();
+		memcpy (fpkt->buf (), upkt->buf (), upkt->size ());
+		fpkt->size (upkt->size ());
+		m_packetQueue.frontNext ();
+	    }
+
+	    // Do something with the metadata
+	    this->onMetadata (upkt->seq (), upkt->tsSent (), upkt->tsRecv (), upkt->tsAck ());
+
+	    m_packetQueue.unackedNext ();
+	    upkt = m_packetQueue.unacked ();
 	}
-	this->retransmit ();
+
     }
+
 }
 
 int UDPStream::retransmit (void) // returns number dropped

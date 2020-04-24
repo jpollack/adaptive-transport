@@ -59,7 +59,7 @@ private:
     void limiterEntry (void);
     std::tuple<int,int,int,int> limiterStats (void);
     void onRecvData (uint32_t dseq, const char *base, uint32_t size);
-    
+    void onMetadata (uint32_t seq, uint64_t tsSent, uint64_t tsRecv, uint64_t tsAck);
     std::unordered_map<uint32_t,std::string> m_recvMap;
     UDPSocket m_socket;
     Address m_peer;
