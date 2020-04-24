@@ -6,84 +6,37 @@
 #include "Packet.hpp"
 
 /* class for network sockets (UDP, TCP, etc.) */
-class Socket : public FileDescriptor
-{
-private:
-  /* get the local or peer address the socket is connected to */
-  Address get_address( const std::string & name_of_function,
-		       const std::function<int(int, sockaddr *, socklen_t *)> & function ) const;
-
-protected:
-  /* default constructor */
-  Socket( const int domain, const int type );
-
-  /* construct from file descriptor */
-  Socket( FileDescriptor && s_fd, const int domain, const int type );
-
-  /* set socket option */
-  template <typename option_type>
-  void setsockopt (const int level, const int option, const option_type& option_value);
-
-public:
-  /* bind socket to a specified local address (usually to listen/accept) */
-  void bind( const Address & address );
-
-  /* connect socket to a specified peer address */
-  void connect( const Address & address );
-
-  /* accessors */
-  Address local_address() const;
-  Address peer_address() const;
-
-  /* allow local address to be reused sooner, at the cost of some robustness */
-  void set_reuseaddr();
-    void set_timeout (uint64_t usecs);
-};
-
-/* UDP socket */
-class UDPSocket : public Socket
+class UDPSocket : public FileDescriptor
 {
 public:
-  UDPSocket() : Socket( AF_INET, SOCK_DGRAM ) {}
+    /* default constructor */
+    UDPSocket(void);
+    static constexpr uint32_t Timeout = 10000; // microseconds
 
-  struct received_datagram {
-    Address source_address;
-    uint64_t timestamp;
-    std::string payload;
-  };
+    /* bind socket to a specified local address (usually to listen/accept) */
+    void bind( const Address & address );
 
-  /* receive datagram, timestamp, and where it came from */
-    std::tuple<uint64_t,Address,std::string> recv();
+    /* accessors */
+    Address local_address() const;
+    Address peer_address() const;
 
-  /* receive datagram, timestamp, and where it came from into a preallocated structure */
+    /* receive datagram, timestamp, and where it came from into a preallocated structure */
     Address recv (Packet &);
     
-  /* send datagram to specified address */
-  void sendto( const Address & peer, const std::string & payload );
-
-    void sendto( const Address & peer, const void* buf, size_t size);
-
-  /* send datagram to connected address */
-  void send( const std::string & payload );
-
-  /* turn on timestamps on receipt */
-  void set_timestamps();
-};
-
-/* TCP socket */
-class TCPSocket : public Socket
-{
+    void sendto (const Address & peer, const void* buf, size_t size);
 private:
-  /* private constructor used by accept() */
-    TCPSocket( FileDescriptor && fd ) : Socket( std::move( fd ), AF_INET, SOCK_STREAM ) {}
+    /* get the local or peer address the socket is connected to */
+    Address get_address( const std::string & name_of_function,
+			 const std::function<int(int, sockaddr *, socklen_t *)> & function ) const;
 
-public:
-  TCPSocket() : Socket( AF_INET, SOCK_STREAM ) {}
+    /* set socket option */
+    template <typename option_type>
+    void setsockopt (const int level, const int option, const option_type& option_value);
+    /* allow local address to be reused sooner, at the cost of some robustness */
+    void set_reuseaddr();
+    void set_timeout (uint64_t usecs);
+    /* turn on timestamps on receipt */
+    void set_timestamps();
 
-  /* mark the socket as listening for incoming connections */
-  void listen( const int backlog = 16 );
-
-  /* accept a new incoming connection */
-  TCPSocket accept();
 };
 
