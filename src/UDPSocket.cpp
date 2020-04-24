@@ -1,6 +1,6 @@
 #include <sys/socket.h>
 
-#include "Socket.hpp"
+#include "UDPSocket.hpp"
 #include "Util.hpp"
 #include "Timing.hpp"
 
