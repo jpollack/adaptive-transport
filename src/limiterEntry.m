@@ -7,7 +7,7 @@ close all;
 fname = '/home/joshua/metadata.tsv';
 
 fid = fopen (fname);
-C = textscan(fid, '%u64\t%u64\t%u64', 'CollectOutput', 1);
+C = textscan(fid, '%u64\t%u64\t%u64\t%u64', 'CollectOutput', 1);
 fclose (fid);
 
 dmat = C{1};

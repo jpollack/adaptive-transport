@@ -36,12 +36,12 @@ void TSC_MarkMid (uint64_t &t0, uint64_t &t1)
                           : "=r" (t0), "=r" (t1) : : "%rax", "%rbx", "%rcx", "%rdx" );
 }
 
-uint64_t MicrosecondsSinceEpoch (void)
-{
-    using Clock = std::chrono::high_resolution_clock;
-    using Resolution = std::chrono::microseconds;
-    return (std::chrono::duration_cast<Resolution> ((std::chrono::time_point_cast<Resolution> (Clock::now ())).time_since_epoch ())).count ();
-}
+// uint64_t MicrosecondsSinceEpoch (void)
+// {
+//     using Clock = std::chrono::high_resolution_clock;
+//     using Resolution = std::chrono::microseconds;
+//     return (std::chrono::duration_cast<Resolution> ((std::chrono::time_point_cast<Resolution> (Clock::now ())).time_since_epoch ())).count ();
+// }
 
 uint64_t wait_until (uint64_t when)
 {

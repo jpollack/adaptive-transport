@@ -27,9 +27,9 @@ int main (int argc, char **argv)
     ustream.bandwidth = std::atoi (argv[3]);
     ustream.updateBandwidth = std::atoi (argv[4]);
     FILE *fh = fopen ("metadata.tsv", "w");
-    ustream.onPacketMetadata = [&](uint32_t seq, uint64_t tsSent, uint64_t tsRecv)
+    ustream.onPacketMetadata = [&](uint32_t seq, uint64_t tsSent, uint64_t tsRecv, uint64_t tsAck)
 				   {
-				       fprintf (fh, "%d\t%lu\t%lu\n", seq, tsSent, tsRecv);
+				       fprintf (fh, "%d\t%lu\t%lu\t%lu\n", seq, tsSent, tsRecv, tsAck);
 				   };
     while (!eof)
     {

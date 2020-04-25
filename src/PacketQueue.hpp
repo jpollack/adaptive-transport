@@ -38,12 +38,10 @@ public:
     
 private:
     using LightweightSemaphore = moodycamel::LightweightSemaphore;
-    int m_front;
+    std::atomic<int> m_front;
     std::atomic<bool> m_frontUsed;
-    int m_tx;
-    int m_sent;
-    int m_unacked;
-    int m_count;
+    std::atomic<int> m_tx;
+    std::atomic<int> m_unacked;
     int m_size;
     std::atomic<uint32_t> m_bytesQueued;
     Packet *m_buf;

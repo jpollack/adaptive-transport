@@ -31,7 +31,7 @@ int main (int argc, char **argv)
 	uint32_t nBytes = ustream.readable ();
 	bytesRemaining -= nBytes;
 	// throw away the data.  to use it, would access ustream.rptr();
-	printf ("Got %d bytes.\t%d bytes remain.\n", nBytes, bytesRemaining);
+	// printf ("Got %d bytes.\t%d bytes remain.\n", nBytes, bytesRemaining);
 	ustream.rptrAdvance (nBytes);
     }
 

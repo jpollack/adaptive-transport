@@ -35,13 +35,13 @@ public:
     void setRemote (const Address& addr);
     uint32_t bytesQueued (void) const;
     // allows for easily printing timing information.  HACK.
-    std::function<void(uint32_t seq, uint64_t tsSent, uint64_t tsRecv)> onPacketMetadata;
+    std::function<void(uint32_t, uint64_t, uint64_t, uint64_t)> onPacketMetadata;
 
     uint32_t bandwidth;
     uint32_t mtu;
     RollingStats rtt;
     bool updateBandwidth;
-
+    void setLogfile (const char *fname);
 private:
     PacketQueue m_packetQueue;
     PTT m_ptt;
@@ -53,6 +53,7 @@ private:
     std::thread m_receiver;
     std::thread m_limiter;
     uint64_t m_tsUpdated;
+    FILE *m_fh;
     void senderEntry (void);
     void receiverEntry (void);
     int retransmit (void);

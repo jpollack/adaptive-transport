@@ -6,9 +6,7 @@ PacketQueue::PacketQueue ()
     : m_front (0),
       m_frontUsed (false),
       m_tx (0),
-      m_sent (0),
       m_unacked (0),
-      m_count (0),
       m_size (8192),
       m_bytesQueued (0),
       m_buf (new Packet[m_size]) // FIXME, that's 11MB right there...

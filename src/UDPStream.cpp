@@ -17,9 +17,9 @@ UDPStream::UDPStream ()
       m_sender (&UDPStream::senderEntry, this),
       m_receiver (&UDPStream::receiverEntry, this),
       m_limiter (&UDPStream::limiterEntry, this),
-      m_tsUpdated (0)
+      m_tsUpdated (0),
+      m_fh (0)
 {
-    rtt.size (16);
 }
 
 UDPStream::~UDPStream ()
@@ -35,6 +35,19 @@ UDPStream::~UDPStream ()
     m_limiter.join ();
 }
 
+void UDPStream::setLogfile (const char *fname)
+{
+    if (m_fh)
+    {
+	fclose (m_fh);
+	m_fh = 0;
+    }
+
+    if (fname)
+    {
+	m_fh = fopen (fname, "w");
+    }
+}
 const uint8_t *UDPStream::rptr () { return m_recvBuff.rptr (); }
 void UDPStream::rptrAdvance (size_t num) { m_recvBuff.rptrAdvance (num); }
 uint32_t UDPStream::readable (void) { return m_recvBuff.used (); }
@@ -58,6 +71,7 @@ void UDPStream::senderEntry (void)
 	}
 	pkt->tsSent (MicrosecondsSinceEpoch ());
 	m_socket.sendto (m_peer, pkt->buf (), pkt->size ());
+	fprintf (stderr, "%llu:\t sent %d.\n", pkt->tsSent (), pkt->seq ());
 	m_packetQueue.txNext ();
     }
 }
@@ -73,7 +87,7 @@ void UDPStream::send (const std::string& msg)
 	{
 	    std::this_thread::yield ();
 	}
-	pkt->seq (m_dseq++);
+	pkt->seq (m_dseq++);		// TODO fix rollover
 	pkt->isAck (false);
 	pkt->size (4 + std::min (bytesRemaining, Packet::MTU));
 	msg.copy (pkt->dataPayload (), pkt->size () - 4, msg.size () - bytesRemaining);
@@ -119,23 +133,34 @@ void UDPStream::onMetadata (uint32_t seq, uint64_t tsSent, uint64_t tsRecv, uint
 {
     if (tsAck)
     {
+	if (tsAck < tsSent)
+	{
+	    fprintf (stderr, "Impossible! %d\t%llu\t%llu\t%llu\n", seq, tsSent, tsRecv, tsAck);
+	    abort ();
+	}
 	rtt (tsAck - tsSent);
     }
     else
     {
 	// dropped
     }
+    // fprintf (stderr, "%lf\t%lf\n", rtt.mean (), rtt.stdev ());
+    if (onPacketMetadata)
+    {
+	onPacketMetadata (seq, tsSent, tsRecv, tsAck);
+    }
 }
 
 void UDPStream::receiverEntry (void)
 {
+    rtt.size (64);
     Packet pkt;
     memset (&pkt, 0, sizeof(Packet));
     while (!m_done)
     {
 	pkt.size (0);
 	const auto raddr = m_socket.recv (pkt);
-
+	uint64_t now = MicrosecondsSinceEpoch ();
 	if (pkt.size ()) // if we received a packet (and not a timeout)
 	{
 	    if (pkt.size () < 4)
@@ -153,15 +178,16 @@ void UDPStream::receiverEntry (void)
 		{
 		    opkt->tsRecv (pkt.tsRecvAck ());
 		    opkt->tsAck (pkt.tsRecv ());
-		    // rtt (opkt->tsAck () - opkt->tsSent ());
-		    // // fprintf (stderr, "RTT: %lf\t%lf\n", rtt.mean (), rtt.stdev ());
-		    // while (m_packetQueue.unacked ()
-		    // 	   && m_packetQueue.unacked ()->tsRecv ()
-		    // 	   && m_packetQueue.unacked ()->tsAck ())
-		    // {
-		    // 	m_packetQueue.unackedNext ();
-		    // }
+		    // fprintf (stderr, "got ack for %lu.  irtt: %lu\n", pkt.seq (), opkt->tsAck () - opkt->tsSent ());
 		}
+		else
+		{
+		    // we got a spurious ack.  and ack for something we've
+		    // already dropped.  perhaps print a warning?
+		    // fprintf (stderr, "spurious ack for %lu\n", pkt.seq ());
+		}
+		// fprintf (stderr, "%llu\n", now - pkt.tsRecv ());
+		fprintf (stderr, "%llu:\t%llu\t got ack for %d.\n", now, pkt.tsRecv (), pkt.seq ());
 	    }
 	    else
 	    {
@@ -174,23 +200,26 @@ void UDPStream::receiverEntry (void)
 		// Send ack immediately
 		m_socket.sendto (raddr, pkt.buf (), pkt.size ());
 	    }
-
-	    // this->retransmit ();
 	}
-	uint64_t now = MicrosecondsSinceEpoch ();
-	uint64_t timeout = std::max (rtt.populated () ? rtt.mean () * 2 : 1000000.0, 10000.0);
+	now = MicrosecondsSinceEpoch ();
+	uint64_t timeout = std::max (rtt.populated () ? std::max (rtt.mean () * 2.0, rtt.mean () + (3.0 * rtt.stdev ())) : 1000000.0, 50000.0);
 	uint64_t dropTime = now - timeout;
-	// starting at the oldest packet.. 
+
+// starting at the oldest packet.. 
 	// * if tsRecv and tsAck are set, then it's been acked.
 	// * while it's older than now - timeout or is an acked packet,
 	// advance
 	
 	Packet *upkt = m_packetQueue.unacked ();
 	while (upkt 
-	       && (upkt->tsRecv () // it's been acked 
-		   || (upkt->tsSent () < dropTime))) // it's too old
+	       && (upkt->tsAck () // it's been acked 
+		   || ((now - upkt->tsSent ()) > timeout))) // it's too old
 	{
-	    if (!upkt->tsRecv ())
+	    if (upkt->tsAck () || upkt->tsRecv ())
+	    {
+		
+	    }
+	    else if ((now - upkt->tsSent ()) > timeout)
 	    {
 		// retransmit
 		Packet *fpkt;
@@ -198,8 +227,13 @@ void UDPStream::receiverEntry (void)
 		memcpy (fpkt->buf (), upkt->buf (), upkt->size ());
 		fpkt->size (upkt->size ());
 		m_packetQueue.frontNext ();
+		// fprintf (stderr, "Dropped packet %d.  Sent %lu (%lu)ago.\n", upkt->seq (), MicrosecondsSinceEpoch () - upkt->tsSent (), now - upkt->tsSent ());
+		// fprintf (stderr, "Dropped packet %d.  %lf\t%lf.\tSent %lu ago.\n", upkt->seq (), rtt.mean (), rtt.stdev (), now - upkt->tsSent ());
 	    }
-
+	    else
+	    {
+		abort ();
+	    }
 	    // Do something with the metadata
 	    this->onMetadata (upkt->seq (), upkt->tsSent (), upkt->tsRecv (), upkt->tsAck ());
 
@@ -256,10 +290,10 @@ std::tuple<int,int,int,int> UDPStream::limiterStats ()
     while (m_ptt.readable ())
     {
 	const PTT::Metadata *mp = m_ptt.rptr ();
-	if (onPacketMetadata)
-	{
-	    onPacketMetadata (mp->seq, mp->tsSent, mp->tsRecv);
-	}
+	// if (onPacketMetadata)
+	// {
+	//     onPacketMetadata (mp->seq, mp->tsSent, mp->tsRecv);
+	// }
 	
 	if (m_tsUpdated > mp->tsSent)
 	{

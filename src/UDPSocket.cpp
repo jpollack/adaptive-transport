@@ -49,28 +49,30 @@ static uint64_t packetTimestamp (msghdr *hdr)
 #endif
 
     uint64_t timestamp = 0;
-    while (tshdr)
+    if (!tshdr)
     {
-	if (tshdr->cmsg_type != desired)
-	{
-	    fprintf (stderr, "Unexpected message type 0x%x.\n", (uint32_t)tshdr->cmsg_type);
-	    abort ();
-	}
-	else
-	{
+	fprintf (stderr, "tshdr invalid.\n");
+	abort ();
+    }
+    
+    if (tshdr->cmsg_type != desired)
+    {
+	fprintf (stderr, "Unexpected message type 0x%x.\n", (uint32_t)tshdr->cmsg_type);
+	abort ();
+    }
+    else
+    {
 #if defined (SO_TIMESTAMPNS)
-	    const timespec *tsp = reinterpret_cast<timespec *>(CMSG_DATA (tshdr));
-	    timestamp = ((tsp->tv_sec * 1000000000) + tsp->tv_nsec) / 1000;
+	const timespec *tsp = reinterpret_cast<timespec *>(CMSG_DATA (tshdr));
+	timestamp = ((tsp->tv_sec * 1000000000) + tsp->tv_nsec) / 1000;
 #elif defined (SO_TIMESTAMP)
-	    const timeval *tvp = reinterpret_cast<timeval *>(CMSG_DATA (tshdr));
-	    timestamp = (tvp->tv_sec * 1000000) + tvp->tv_usec;
+	const timeval *tvp = reinterpret_cast<timeval *>(CMSG_DATA (tshdr));
+	timestamp = (tvp->tv_sec * 1000000) + tvp->tv_usec;
 #else
 #error "Cannot get packet timestamps."
 #endif
-	}
-	tshdr = CMSG_NXTHDR (hdr, tshdr);
     }
-
+    
     if (!timestamp)
     {
 	fprintf (stderr, "Did not find packet timestamp.\n");
